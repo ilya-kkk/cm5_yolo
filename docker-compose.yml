@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  yolo-camera-stream:
+    build: .
+    container_name: hailo_yolo_camera_stream
+    volumes:
+      - .:/workspace
+      - /dev:/dev  # Access to devices
+      - /sys:/sys  # Access to system info
+      - /tmp:/tmp  # Access to temp files
+      - /var/run/dbus:/var/run/dbus  # Access to D-Bus
+    environment:
+      - HAILO_ARCH=hailo8l
+      - PYTHONPATH=/workspace
+      - DISPLAY=${DISPLAY}
+      - XDG_RUNTIME_DIR=/tmp/runtime-docker
+    working_dir: /workspace
+    privileged: true  # Required for camera and Hailo access
+    devices:
+      - /dev/video0:/dev/video0  # Camera device
+      - /dev/video1:/dev/video1  # Additional video devices if needed
+      - /dev/video2:/dev/video2  # Additional video devices if needed
+      - /dev/video3:/dev/video3  # Additional video devices if needed
+    network_mode: "host"  # Required for UDP streaming
+    restart: unless-stopped
+    command: ["python3", "/workspace/main_camera_yolo.py"]
+    cap_add:
+      - SYS_ADMIN  # Required for some system operations
+      - SYS_RAWIO  # Required for device access
+    security_opt:
+      - seccomp:unconfined  # Required for some camera operations 
