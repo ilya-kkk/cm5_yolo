@@ -61,6 +61,9 @@ class YOLOCameraStream:
         self.fps_start_time = time.time()
         self.current_fps = 0
         
+        # External camera stream process
+        self.libcamera_process = None
+        
         # YOLO classes (COCO dataset)
         self.classes = [
             'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
@@ -80,75 +83,58 @@ class YOLOCameraStream:
         self.colors = np.random.randint(0, 255, size=(len(self.classes), 3), dtype=np.uint8)
     
     def start_camera(self):
-        """Start CSI camera capture"""
+        """Start camera capture from UDP stream"""
         try:
-            # Try different camera access methods
-            camera_methods = [
-                f"libcamera://{self.camera_index}",  # Libcamera (should work better in Docker)
-                f"/dev/video{self.camera_index}",  # Direct device access
-                "/dev/video0",  # Default video device
-                "/dev/video1",  # Alternative video device
-                "/dev/video2",  # Alternative video device
-                "/dev/video3",  # Alternative video device
-                "/dev/video4",  # Alternative video device
-                "/dev/video5",  # Alternative video device
-                "/dev/video6",  # Alternative video device
-                "/dev/video7",  # Alternative video device
-                "/dev/video20",  # PiSP backend device
-                "/dev/video21",  # PiSP backend device
-                "/dev/video22",  # PiSP backend device
-            ]
+            print("Starting camera from UDP stream...")
             
-            # First try GStreamer with libcamera
-            if self.try_gstreamer_camera():
-                return True
+            # First ensure external camera stream is running
+            if not self.ensure_camera_stream_running():
+                print("Failed to start external camera stream")
+                return False
             
-            # Then try libcamera subprocess
-            if self.try_libcamera_subprocess():
-                return True
+            # Wait a bit more for stream to stabilize
+            time.sleep(2)
             
-            # Then try libcamera-vid streaming
-            if self.try_libcamera_vid_streaming():
-                return True
+            # Try to connect to UDP stream from external libcamera-vid process
+            udp_url = "udp://127.0.0.1:5000"
             
-            for camera_device in camera_methods:
-                print(f"Trying camera device: {camera_device}")
+            # Use GStreamer to read from UDP stream
+            gst_str = f"udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! appsink"
+            
+            print(f"Trying GStreamer UDP stream: {gst_str}")
+            
+            self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+            
+            if self.camera.isOpened():
+                # Wait a bit for stream to start
+                time.sleep(2)
                 
-                if camera_device.startswith("/dev/"):
-                    if not os.path.exists(camera_device):
-                        print(f"Device {camera_device} does not exist, skipping...")
-                        continue
-                
-                try:
-                    self.camera = cv2.VideoCapture(camera_device)
-                    
-                    # Set camera properties
-                    self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-                    self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-                    self.camera.set(cv2.CAP_PROP_FPS, self.fps)
-                    
-                    # Try to read a test frame
-                    if self.camera.isOpened():
-                        ret, test_frame = self.camera.read()
-                        if ret and test_frame is not None:
-                            print(f"Camera started successfully: {camera_device} - {self.width}x{self.height} @ {self.fps}fps")
-                            print(f"Test frame shape: {test_frame.shape}")
-                            return True
-                        else:
-                            print(f"Camera opened but failed to read frame from {camera_device}")
-                            print(f"OpenCV return value: {ret}, frame type: {type(test_frame)}")
-                            self.camera.release()
-                    else:
-                        print(f"Failed to open camera at {camera_device}")
-                        if hasattr(self, 'camera'):
-                            self.camera.release()
-                            
-                except Exception as e:
-                    print(f"Error with {camera_device}: {e}")
-                    print(f"Exception type: {type(e).__name__}")
-                    if hasattr(self, 'camera'):
-                        self.camera.release()
-                    continue
+                # Try to read a test frame
+                ret, test_frame = self.camera.read()
+                if ret and test_frame is not None:
+                    print(f"UDP stream camera started successfully: frame shape: {test_frame.shape}")
+                    return True
+                else:
+                    print("UDP stream camera opened but failed to read frame")
+                    self.camera.release()
+            else:
+                print("Failed to open UDP stream camera")
+            
+            # Fallback: try direct UDP with OpenCV
+            print("Trying direct UDP with OpenCV...")
+            self.camera = cv2.VideoCapture(udp_url)
+            
+            if self.camera.isOpened():
+                time.sleep(2)
+                ret, test_frame = self.camera.read()
+                if ret and test_frame is not None:
+                    print(f"Direct UDP camera started successfully: frame shape: {test_frame.shape}")
+                    return True
+                else:
+                    print("Direct UDP camera opened but failed to read frame")
+                    self.camera.release()
+            else:
+                print("Failed to open direct UDP camera")
             
             print("All camera access methods failed")
             return False
@@ -159,147 +145,18 @@ class YOLOCameraStream:
     
     def try_gstreamer_camera(self):
         """Try to start camera using GStreamer with libcamera"""
-        try:
-            print("Trying GStreamer with libcamera...")
-            
-            # Create GStreamer pipeline for libcamera - simpler version
-            gst_str = "libcamerasrc ! videoconvert ! appsink"
-            
-            self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
-            
-            if self.camera.isOpened():
-                ret, test_frame = self.camera.read()
-                if ret and test_frame is not None:
-                    print(f"GStreamer camera started successfully: frame shape: {test_frame.shape}")
-                    return True
-                else:
-                    print("GStreamer camera opened but failed to read frame")
-                    self.camera.release()
-            else:
-                print("Failed to open GStreamer camera")
-                
-        except Exception as e:
-            print(f"Error with GStreamer camera: {e}")
-            if hasattr(self, 'camera'):
-                self.camera.release()
-        
+        # This method is no longer used with UDP stream approach
         return False
     
     def try_libcamera_subprocess(self):
         """Try to start camera using libcamera-still subprocess"""
-        try:
-            print("Trying libcamera-still subprocess...")
-            
-            # Test if we can capture a frame using libcamera-still
-            test_cmd = [
-                'libcamera-still', 
-                '-o', '/tmp/test_capture.jpg',
-                '--timeout', '2000',
-                '--width', str(self.width),
-                '--height', str(self.height)
-            ]
-            
-            result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
-            
-            if result.returncode == 0 and os.path.exists('/tmp/test_capture.jpg'):
-                print("libcamera-still test successful")
-                # Clean up test file
-                os.remove('/tmp/test_capture.jpg')
-                
-                # Now try to use OpenCV with libcamera device
-                # Try /dev/video20 which is often the PiSP backend
-                for device in ['/dev/video20', '/dev/video21', '/dev/video22']:
-                    if os.path.exists(device):
-                        print(f"Trying libcamera device: {device}")
-                        self.camera = cv2.VideoCapture(device)
-                        
-                        if self.camera.isOpened():
-                            ret, test_frame = self.camera.read()
-                            if ret and test_frame is not None:
-                                print(f"libcamera device {device} started successfully: frame shape: {test_frame.shape}")
-                                return True
-                            else:
-                                print(f"libcamera device {device} opened but failed to read frame")
-                                self.camera.release()
-                        else:
-                            print(f"Failed to open libcamera device {device}")
-                
-                return False
-            else:
-                print(f"libcamera-still test failed: {result.stderr}")
-                return False
-                
-        except Exception as e:
-            print(f"Error with libcamera subprocess: {e}")
-            return False
+        # This method is no longer used with UDP stream approach
+        return False
     
     def try_libcamera_vid_streaming(self):
-        """Try to start camera using libcamera-vid for direct streaming"""
-        try:
-            print("Trying libcamera-vid streaming...")
-            
-            # Check if libcamera-vid is available
-            result = subprocess.run(['which', 'libcamera-vid'], capture_output=True, text=True)
-            if result.returncode != 0:
-                print("libcamera-vid not found")
-                return False
-            
-            # Start libcamera-vid streaming process
-            stream_cmd = [
-                'libcamera-vid',
-                '-t', '0',  # Stream indefinitely
-                '--codec', 'h264',
-                '--width', str(self.width),
-                '--height', str(self.height),
-                '--framerate', str(self.fps),
-                '--inline',
-                '-o', 'udp://127.0.0.1:5000'  # Stream to local UDP port
-            ]
-            
-            print(f"Starting libcamera-vid: {' '.join(stream_cmd)}")
-            
-            # Start the streaming process
-            self.libcamera_process = subprocess.Popen(
-                stream_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            
-            # Wait a bit for the process to start
-            time.sleep(3)
-            
-            # Check if process is still running
-            if self.libcamera_process.poll() is None:
-                print("libcamera-vid streaming started successfully")
-                
-                # Now try to open the UDP stream with OpenCV for processing
-                # Use GStreamer pipeline to receive UDP stream
-                gst_str = f"udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! appsink"
-                
-                self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
-                
-                if self.camera.isOpened():
-                    ret, test_frame = self.camera.read()
-                    if ret and test_frame is not None:
-                        print(f"UDP stream opened successfully: frame shape: {test_frame.shape}")
-                        return True
-                    else:
-                        print("UDP stream opened but failed to read frame")
-                        self.camera.release()
-                        return False
-                else:
-                    print("Failed to open UDP stream")
-                    return False
-            else:
-                print("libcamera-vid failed to start")
-                stdout, stderr = self.libcamera_process.communicate()
-                print(f"stdout: {stdout.decode()}")
-                print(f"stderr: {stderr.decode()}")
-                return False
-                
-        except Exception as e:
-            print(f"Error with libcamera-vid streaming: {e}")
-            return False
+        """Try to start camera using libcamera-vid streaming"""
+        # This method is no longer used with UDP stream approach
+        return False
     
     def camera_capture_thread(self):
         """Thread for capturing frames from camera"""
@@ -582,34 +439,6 @@ class YOLOCameraStream:
         """Stop the camera stream processing"""
         self.running = False
         
-        # Stop libcamera-vid process if running
-        if hasattr(self, 'libcamera_process') and self.libcamera_process:
-            try:
-                self.libcamera_process.terminate()
-                self.libcamera_process.wait(timeout=5)
-                print("libcamera-vid process stopped")
-            except subprocess.TimeoutExpired:
-                self.libcamera_process.kill()
-                print("libcamera-vid process killed")
-            except Exception as e:
-                print(f"Error stopping libcamera-vid: {e}")
-        
-        # Stop GStreamer process if running
-        if hasattr(self, 'gst_process') and self.gst_process:
-            try:
-                self.gst_process.terminate()
-                self.gst_process.wait(timeout=5)
-                print("GStreamer process stopped")
-            except subprocess.TimeoutExpired:
-                self.gst_process.kill()
-                print("GStreamer process killed")
-            except Exception as e:
-                print(f"Error stopping GStreamer: {e}")
-        
-        # Stop camera
-        if hasattr(self, 'camera') and self.camera.isOpened():
-            self.camera.release()
-        
         # Wait for threads to finish
         if hasattr(self, 'capture_thread'):
             self.capture_thread.join(timeout=1.0)
@@ -617,6 +446,9 @@ class YOLOCameraStream:
             self.processing_thread_obj.join(timeout=1.0)
         if hasattr(self, 'streaming_thread_obj'):
             self.streaming_thread_obj.join(timeout=1.0)
+        
+        # Cleanup all resources
+        self.cleanup()
         
         print("YOLO camera stream stopped")
 
@@ -654,9 +486,99 @@ class YOLOCameraStream:
             print(f"Error starting processed video streaming: {e}")
             return False
 
+    def ensure_camera_stream_running(self):
+        """Ensure external camera stream is running"""
+        try:
+            # Check if libcamera-vid is already running
+            result = subprocess.run(['pgrep', '-f', 'libcamera-vid'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("External camera stream already running")
+                return True
+            
+            print("Starting external camera stream...")
+            
+            # Start libcamera-vid streaming process
+            stream_cmd = [
+                'libcamera-vid',
+                '-t', '0',  # Stream indefinitely
+                '--codec', 'h264',
+                '--width', str(self.width),
+                '--height', str(self.height),
+                '--framerate', str(self.fps),
+                '--inline',
+                '-o', 'udp://127.0.0.1:5000'  # Stream to local UDP port
+            ]
+            
+            print(f"Starting libcamera-vid: {' '.join(stream_cmd)}")
+            
+            # Start the streaming process
+            self.libcamera_process = subprocess.Popen(
+                stream_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # Wait a bit for the process to start
+            time.sleep(3)
+            
+            # Check if process is still running
+            if self.libcamera_process.poll() is None:
+                print("External camera stream started successfully")
+                return True
+            else:
+                print("Failed to start external camera stream")
+                stdout, stderr = self.libcamera_process.communicate()
+                print(f"stdout: {stdout.decode()}")
+                print(f"stderr: {stderr.decode()}")
+                return False
+                
+        except Exception as e:
+            print(f"Error starting external camera stream: {e}")
+            return False
+
+    def stop_camera(self):
+        """Stop camera capture and cleanup"""
+        try:
+            if hasattr(self, 'camera') and self.camera is not None:
+                self.camera.release()
+                self.camera = None
+                print("Camera stopped")
+            
+            # Stop external camera stream process
+            if hasattr(self, 'libcamera_process') and self.libcamera_process is not None:
+                try:
+                    self.libcamera_process.terminate()
+                    self.libcamera_process.wait(timeout=5)
+                    print("External camera stream stopped")
+                except subprocess.TimeoutExpired:
+                    self.libcamera_process.kill()
+                    print("External camera stream force killed")
+                except Exception as e:
+                    print(f"Error stopping external camera stream: {e}")
+                finally:
+                    self.libcamera_process = None
+                    
+        except Exception as e:
+            print(f"Error stopping camera: {e}")
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        try:
+            self.stop_camera()
+            
+            # Kill any remaining libcamera-vid processes
+            try:
+                subprocess.run(['pkill', '-f', 'libcamera-vid'], capture_output=True)
+                print("Cleaned up any remaining camera processes")
+            except Exception as e:
+                print(f"Error cleaning up camera processes: {e}")
+                
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
 def signal_handler(sig, frame):
     """Handle Ctrl+C signal"""
-    print("\nStopping...")
+    print("\nReceived interrupt signal, stopping stream...")
     if hasattr(signal_handler, 'stream'):
         signal_handler.stream.stop()
     sys.exit(0)
