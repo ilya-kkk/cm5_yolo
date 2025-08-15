@@ -107,6 +107,10 @@ class YOLOCameraStream:
             if self.try_libcamera_subprocess():
                 return True
             
+            # Then try libcamera-vid streaming
+            if self.try_libcamera_vid_streaming():
+                return True
+            
             for camera_device in camera_methods:
                 print(f"Trying camera device: {camera_device}")
                 
@@ -227,6 +231,56 @@ class YOLOCameraStream:
                 
         except Exception as e:
             print(f"Error with libcamera subprocess: {e}")
+            return False
+    
+    def try_libcamera_vid_streaming(self):
+        """Try to start camera using libcamera-vid for direct streaming"""
+        try:
+            print("Trying libcamera-vid streaming...")
+            
+            # Check if libcamera-vid is available
+            result = subprocess.run(['which', 'libcamera-vid'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print("libcamera-vid not found")
+                return False
+            
+            # Start libcamera-vid streaming process
+            stream_cmd = [
+                'libcamera-vid',
+                '-t', '0',  # Stream indefinitely
+                '--codec', 'h264',
+                '--width', str(self.width),
+                '--height', str(self.height),
+                '--framerate', str(self.fps),
+                '--inline',
+                '-o', 'udp://127.0.0.1:5000'  # Stream to local UDP port
+            ]
+            
+            print(f"Starting libcamera-vid: {' '.join(stream_cmd)}")
+            
+            # Start the streaming process
+            self.libcamera_process = subprocess.Popen(
+                stream_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # Wait a bit for the process to start
+            time.sleep(2)
+            
+            # Check if process is still running
+            if self.libcamera_process.poll() is None:
+                print("libcamera-vid streaming started successfully")
+                return True
+            else:
+                print("libcamera-vid failed to start")
+                stdout, stderr = self.libcamera_process.communicate()
+                print(f"stdout: {stdout.decode()}")
+                print(f"stderr: {stderr.decode()}")
+                return False
+                
+        except Exception as e:
+            print(f"Error with libcamera-vid streaming: {e}")
             return False
     
     def camera_capture_thread(self):
@@ -495,6 +549,18 @@ class YOLOCameraStream:
     def stop(self):
         """Stop the camera stream processing"""
         self.running = False
+        
+        # Stop libcamera-vid process if running
+        if hasattr(self, 'libcamera_process') and self.libcamera_process:
+            try:
+                self.libcamera_process.terminate()
+                self.libcamera_process.wait(timeout=5)
+                print("libcamera-vid process stopped")
+            except subprocess.TimeoutExpired:
+                self.libcamera_process.kill()
+                print("libcamera-vid process killed")
+            except Exception as e:
+                print(f"Error stopping libcamera-vid: {e}")
         
         # Stop camera
         if hasattr(self, 'camera') and self.camera.isOpened():
