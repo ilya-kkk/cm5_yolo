@@ -81,24 +81,53 @@ class YOLOCameraStream:
     def start_camera(self):
         """Start CSI camera capture"""
         try:
-            # Try direct device access first, then fallback to libcamera
-            camera_device = f"/dev/video{self.camera_index}"
-            if os.path.exists(camera_device):
-                self.camera = cv2.VideoCapture(camera_device)
-            else:
-                # Fallback to libcamera
-                self.camera = cv2.VideoCapture(f"libcamera://{self.camera_index}")
+            # Try different camera access methods
+            camera_methods = [
+                f"/dev/video{self.camera_index}",  # Direct device access
+                f"libcamera://{self.camera_index}",  # Libcamera
+                "/dev/video0",  # Default video device
+                "/dev/video1",  # Alternative video device
+                "/dev/video2",  # Alternative video device
+            ]
             
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-            self.camera.set(cv2.CAP_PROP_FPS, self.fps)
-            
-            if not self.camera.isOpened():
-                print(f"Failed to open camera {self.camera_index} at {camera_device}")
-                return False
+            for camera_device in camera_methods:
+                print(f"Trying camera device: {camera_device}")
                 
-            print(f"Camera started: {self.width}x{self.height} @ {self.fps}fps")
-            return True
+                if camera_device.startswith("/dev/"):
+                    if not os.path.exists(camera_device):
+                        print(f"Device {camera_device} does not exist, skipping...")
+                        continue
+                
+                try:
+                    self.camera = cv2.VideoCapture(camera_device)
+                    
+                    # Set camera properties
+                    self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+                    self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+                    self.camera.set(cv2.CAP_PROP_FPS, self.fps)
+                    
+                    # Try to read a test frame
+                    if self.camera.isOpened():
+                        ret, test_frame = self.camera.read()
+                        if ret and test_frame is not None:
+                            print(f"Camera started successfully: {camera_device} - {self.width}x{self.height} @ {self.fps}fps")
+                            return True
+                        else:
+                            print(f"Camera opened but failed to read frame from {camera_device}")
+                            self.camera.release()
+                    else:
+                        print(f"Failed to open camera at {camera_device}")
+                        if hasattr(self, 'camera'):
+                            self.camera.release()
+                            
+                except Exception as e:
+                    print(f"Error with {camera_device}: {e}")
+                    if hasattr(self, 'camera'):
+                        self.camera.release()
+                    continue
+            
+            print("All camera access methods failed")
+            return False
             
         except Exception as e:
             print(f"Error starting camera: {e}")
