@@ -38,6 +38,8 @@ RUN apt-get update && apt-get install -y \
     v4l-utils \
     curl \
     wget \
+    ffmpeg \
+    netcat \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Hailo Platform
