@@ -154,20 +154,15 @@ class YOLOCameraStream:
         try:
             print("Trying GStreamer with libcamera...")
             
-            # Create GStreamer pipeline for libcamera
-            gst_str = (
-                f"libcamerasrc camera-name=camera0 ! "
-                f"video/x-raw,width={self.width},height={self.height},framerate={self.fps}/1 ! "
-                f"videoconvert ! appsink"
-            )
+            # Create GStreamer pipeline for libcamera - simpler version
+            gst_str = "libcamerasrc ! videoconvert ! appsink"
             
             self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
             
             if self.camera.isOpened():
                 ret, test_frame = self.camera.read()
                 if ret and test_frame is not None:
-                    print(f"GStreamer camera started successfully: {self.width}x{self.height} @ {self.fps}fps")
-                    print(f"Test frame shape: {test_frame.shape}")
+                    print(f"GStreamer camera started successfully: frame shape: {test_frame.shape}")
                     return True
                 else:
                     print("GStreamer camera opened but failed to read frame")
