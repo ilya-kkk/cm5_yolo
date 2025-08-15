@@ -103,6 +103,10 @@ class YOLOCameraStream:
             if self.try_gstreamer_camera():
                 return True
             
+            # Then try libcamera subprocess
+            if self.try_libcamera_subprocess():
+                return True
+            
             for camera_device in camera_methods:
                 print(f"Trying camera device: {camera_device}")
                 
@@ -176,6 +180,54 @@ class YOLOCameraStream:
                 self.camera.release()
         
         return False
+    
+    def try_libcamera_subprocess(self):
+        """Try to start camera using libcamera-still subprocess"""
+        try:
+            print("Trying libcamera-still subprocess...")
+            
+            # Test if we can capture a frame using libcamera-still
+            test_cmd = [
+                'libcamera-still', 
+                '-o', '/tmp/test_capture.jpg',
+                '--timeout', '2000',
+                '--width', str(self.width),
+                '--height', str(self.height)
+            ]
+            
+            result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and os.path.exists('/tmp/test_capture.jpg'):
+                print("libcamera-still test successful")
+                # Clean up test file
+                os.remove('/tmp/test_capture.jpg')
+                
+                # Now try to use OpenCV with libcamera device
+                # Try /dev/video20 which is often the PiSP backend
+                for device in ['/dev/video20', '/dev/video21', '/dev/video22']:
+                    if os.path.exists(device):
+                        print(f"Trying libcamera device: {device}")
+                        self.camera = cv2.VideoCapture(device)
+                        
+                        if self.camera.isOpened():
+                            ret, test_frame = self.camera.read()
+                            if ret and test_frame is not None:
+                                print(f"libcamera device {device} started successfully: frame shape: {test_frame.shape}")
+                                return True
+                            else:
+                                print(f"libcamera device {device} opened but failed to read frame")
+                                self.camera.release()
+                        else:
+                            print(f"Failed to open libcamera device {device}")
+                
+                return False
+            else:
+                print(f"libcamera-still test failed: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"Error with libcamera subprocess: {e}")
+            return False
     
     def camera_capture_thread(self):
         """Thread for capturing frames from camera"""
