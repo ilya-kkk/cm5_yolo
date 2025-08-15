@@ -83,6 +83,29 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                         height: auto; 
                         border-radius: 8px;
                         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                        transition: opacity 0.1s ease-in-out;
+                        opacity: 1;
+                    }
+                    .video-container {
+                        position: relative;
+                        overflow: hidden;
+                        border-radius: 8px;
+                        background: #000;
+                        min-height: 300px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .video-stats {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        background: rgba(0,0,0,0.7);
+                        color: white;
+                        padding: 8px 12px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-family: monospace;
                     }
                     .error { 
                         color: #dc3545; 
@@ -131,13 +154,24 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                     <div id="errorMessage" class="error" style="display: none;">
                         Error loading frame
                     </div>
-                    <img id="currentFrame" src="" alt="No frame available" style="display: none;">
+                    <div class="video-container">
+                        <img id="currentFrame" src="" alt="No frame available" style="display: none;">
+                        <div class="video-stats" id="videoStats" style="display: none;">
+                            FPS: <span id="currentFPS">0</span> | 
+                            Frames: <span id="bufferFrames">0</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <script>
                     let viewingInterval;
                     let isViewing = false;
                     let frameCount = 0;
+                    let frameBuffer = [];
+                    let currentFrameIndex = 0;
+                    let lastFrameTime = 0;
+                    const targetFPS = 15; // Reduced FPS for smoother playback
+                    const frameInterval = 1000 / targetFPS;
                     
                     function showMessage(elementId, message, type) {
                         const element = document.getElementById(elementId);
@@ -191,9 +225,7 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                             });
                     }
                     
-                    function refreshFrame() {
-                        showMessage('loadingMessage', 'Loading frame...', 'loading');
-                        
+                    function loadFrameToBuffer() {
                         fetch('/frame')
                             .then(response => {
                                 if (!response.ok) {
@@ -202,38 +234,124 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                                 return response.blob();
                             })
                             .then(blob => {
-                                const img = document.getElementById('currentFrame');
                                 const url = URL.createObjectURL(blob);
-                                
-                                img.onload = function() {
-                                    showMessage('loadingMessage', 'Frame loaded successfully!', 'success');
-                                    setTimeout(() => {
-                                        document.getElementById('loadingMessage').style.display = 'none';
-                                    }, 1000);
-                                    frameCount++;
+                                const frameData = {
+                                    url: url,
+                                    timestamp: Date.now()
                                 };
                                 
-                                img.onerror = function() {
-                                    showMessage('errorMessage', 'Failed to load image', 'error');
-                                };
+                                // Add to buffer (keep only last 5 frames)
+                                frameBuffer.push(frameData);
+                                if (frameBuffer.length > 5) {
+                                    const oldFrame = frameBuffer.shift();
+                                    URL.revokeObjectURL(oldFrame.url); // Clean up memory
+                                }
                                 
-                                img.src = url;
-                                img.style.display = 'block';
+                                // Update frame counter
+                                frameCount++;
                             })
                             .catch(error => {
                                 console.error('Frame loading error:', error);
-                                showMessage('errorMessage', 'Error loading frame: ' + error.message, 'error');
                             });
+                    }
+                    
+                    function displayNextFrame() {
+                        if (frameBuffer.length === 0) return;
+                        
+                        const now = Date.now();
+                        if (now - lastFrameTime < frameInterval) return;
+                        
+                        const frameData = frameBuffer[currentFrameIndex % frameBuffer.length];
+                        const img = document.getElementById('currentFrame');
+                        
+                        // Smooth transition
+                        img.style.opacity = '0';
+                        img.style.transition = 'opacity 0.1s ease-in-out';
+                        
+                        setTimeout(() => {
+                            img.src = frameData.url;
+                            img.style.display = 'block';
+                            
+                            img.onload = function() {
+                                img.style.opacity = '1';
+                                lastFrameTime = now;
+                                currentFrameIndex++;
+                                
+                                // Update stats
+                                updateVideoStats();
+                            };
+                            
+                            img.onerror = function() {
+                                console.error('Failed to load frame image');
+                            };
+                        }, 50);
+                    }
+                    
+                    function updateVideoStats() {
+                        const statsElement = document.getElementById('videoStats');
+                        const fpsElement = document.getElementById('currentFPS');
+                        const bufferElement = document.getElementById('bufferFrames');
+                        
+                        if (frameBuffer.length > 0) {
+                            statsElement.style.display = 'block';
+                            bufferElement.textContent = frameBuffer.length;
+                            
+                            // Calculate FPS
+                            const now = Date.now();
+                            const timeDiff = now - lastFrameTime;
+                            if (timeDiff > 0) {
+                                const currentFPS = Math.round(1000 / timeDiff);
+                                fpsElement.textContent = currentFPS;
+                            }
+                        }
+                    }
+                    
+                    function refreshFrame() {
+                        showMessage('loadingMessage', 'Loading frame...', 'loading');
+                        
+                        loadFrameToBuffer();
+                        
+                        setTimeout(() => {
+                            if (frameBuffer.length > 0) {
+                                displayNextFrame();
+                                showMessage('loadingMessage', 'Frame loaded successfully!', 'success');
+                                setTimeout(() => {
+                                    document.getElementById('loadingMessage').style.display = 'none';
+                                }, 1000);
+                            } else {
+                                showMessage('errorMessage', 'No frames available', 'error');
+                            }
+                        }, 500);
                     }
                     
                     function startViewing() {
                         if (isViewing) return;
                         isViewing = true;
-                        viewingInterval = setInterval(refreshFrame, 200); // 5 FPS for mobile
-                        document.getElementById('status').textContent = 'Viewing...';
-                        showMessage('loadingMessage', 'Started viewing...', 'success');
+                        
+                        // Pre-load some frames
+                        showMessage('loadingMessage', 'Pre-loading frames...', 'loading');
+                        
+                        // Load initial frames
+                        for (let i = 0; i < 3; i++) {
+                            setTimeout(() => loadFrameToBuffer(), i * 200);
+                        }
+                        
                         setTimeout(() => {
-                            document.getElementById('loadingMessage').style.display = 'none';
+                            if (frameBuffer.length > 0) {
+                                viewingInterval = setInterval(() => {
+                                    loadFrameToBuffer();
+                                    displayNextFrame();
+                                }, 200); // Load new frame every 200ms
+                                
+                                document.getElementById('status').textContent = 'Viewing...';
+                                showMessage('loadingMessage', 'Started viewing...', 'success');
+                                setTimeout(() => {
+                                    document.getElementById('loadingMessage').style.display = 'none';
+                                }, 1000);
+                            } else {
+                                showMessage('errorMessage', 'Failed to load initial frames', 'error');
+                                isViewing = false;
+                            }
                         }, 1000);
                     }
                     
