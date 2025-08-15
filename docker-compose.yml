@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   yolo-camera-stream:
     build: .
@@ -13,7 +11,7 @@ services:
     environment:
       - HAILO_ARCH=hailo8l
       - PYTHONPATH=/workspace
-      - DISPLAY=${DISPLAY}
+      - DISPLAY=${DISPLAY:-:0}
       - XDG_RUNTIME_DIR=/tmp/runtime-docker
     working_dir: /workspace
     privileged: true  # Required for camera and Hailo access

@@ -1,5 +1,5 @@
-# Use official Hailo Docker image as base
-FROM hailoai/hailo8:latest
+# Use Ubuntu as base image
+FROM ubuntu:22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,6 +13,7 @@ WORKDIR ${WORKSPACE}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    python3 \
     python3-opencv \
     python3-pip \
     python3-dev \
@@ -47,13 +48,18 @@ RUN apt-get update && apt-get install -y \
     libcamera-dev \
     libcamera-apps-dev \
     v4l-utils \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Hailo Platform
+RUN wget -O - https://hailo-hailort.s3.eu-west-2.amazonaws.com/ModelZoo/Releases/Hailo8/v4.0.0/hailo_platform_4.0.0_amd64.deb | dpkg -i - || true \
+    && apt-get install -f -y
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir \
     opencv-python \
     numpy \
-    hailo-platform \
     Pillow
 
 # Create runtime directory

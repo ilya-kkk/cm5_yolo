@@ -26,6 +26,12 @@ If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm
   ```bash
   ssh cm5 'docker compose run <SERVICE> <COMMAND>'
 
+## Code changes Workflow
+- After every code change, you must run the following commands:
+  ```bash
+  git add . && git commit -m '<NAME>' && git push && ssh cm5 'cd cm5_yolo && git fetch --all && git reset --hard origin/main'
+- Replace <NAME> with a short description of the bug fix or feature added in this commit.
+
 ## To verify that the video streaming solution works correctly, execute the following command on the CM5:
 - run on current pc:
   ```bash
