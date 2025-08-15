@@ -27,7 +27,7 @@ except ImportError:
     hailo_platform = None
 
 class YOLOCameraStream:
-    def __init__(self, hef_path, camera_index=0, width=1920, height=1080, fps=30):
+    def __init__(self, hef_path, camera_index=0, width=640, height=480, fps=30):
         self.hef_path = hef_path
         self.camera_index = camera_index
         self.width = width
@@ -84,8 +84,8 @@ class YOLOCameraStream:
         try:
             # Try different camera access methods
             camera_methods = [
+                f"libcamera://{self.camera_index}",  # Libcamera (should work better in Docker)
                 f"/dev/video{self.camera_index}",  # Direct device access
-                f"libcamera://{self.camera_index}",  # Libcamera
                 "/dev/video0",  # Default video device
                 "/dev/video1",  # Alternative video device
                 "/dev/video2",  # Alternative video device
@@ -124,6 +124,7 @@ class YOLOCameraStream:
                             return True
                         else:
                             print(f"Camera opened but failed to read frame from {camera_device}")
+                            print(f"OpenCV return value: {ret}, frame type: {type(test_frame)}")
                             self.camera.release()
                     else:
                         print(f"Failed to open camera at {camera_device}")
@@ -132,6 +133,7 @@ class YOLOCameraStream:
                             
                 except Exception as e:
                     print(f"Error with {camera_device}: {e}")
+                    print(f"Exception type: {type(e).__name__}")
                     if hasattr(self, 'camera'):
                         self.camera.release()
                     continue
@@ -440,8 +442,8 @@ def main():
     stream = YOLOCameraStream(
         hef_path="yolov8n.hef",
         camera_index=0,
-        width=1920,
-        height=1080,
+        width=640,
+        height=480,
         fps=30
     )
     
