@@ -266,12 +266,30 @@ class YOLOCameraStream:
             )
             
             # Wait a bit for the process to start
-            time.sleep(2)
+            time.sleep(3)
             
             # Check if process is still running
             if self.libcamera_process.poll() is None:
                 print("libcamera-vid streaming started successfully")
-                return True
+                
+                # Now try to open the UDP stream with OpenCV
+                # Use GStreamer pipeline to receive UDP stream
+                gst_str = f"udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! appsink"
+                
+                self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+                
+                if self.camera.isOpened():
+                    ret, test_frame = self.camera.read()
+                    if ret and test_frame is not None:
+                        print(f"UDP stream opened successfully: frame shape: {test_frame.shape}")
+                        return True
+                    else:
+                        print("UDP stream opened but failed to read frame")
+                        self.camera.release()
+                        return False
+                else:
+                    print("Failed to open UDP stream")
+                    return False
             else:
                 print("libcamera-vid failed to start")
                 stdout, stderr = self.libcamera_process.communicate()
