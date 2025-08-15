@@ -87,12 +87,7 @@ class YOLOCameraStream:
         try:
             print("Starting camera from UDP stream...")
             
-            # First ensure external camera stream is running
-            if not self.ensure_camera_stream_running():
-                print("Failed to start external camera stream")
-                return False
-            
-            # Wait a bit more for stream to stabilize
+            # Wait a bit for stream to stabilize
             time.sleep(2)
             
             # Try to connect to UDP stream from external libcamera-vid process
@@ -565,13 +560,7 @@ class YOLOCameraStream:
         """Cleanup resources"""
         try:
             self.stop_camera()
-            
-            # Kill any remaining libcamera-vid processes
-            try:
-                subprocess.run(['pkill', '-f', 'libcamera-vid'], capture_output=True)
-                print("Cleaned up any remaining camera processes")
-            except Exception as e:
-                print(f"Error cleaning up camera processes: {e}")
+            print("Camera resources cleaned up")
                 
         except Exception as e:
             print(f"Error during cleanup: {e}")
