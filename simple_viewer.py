@@ -184,9 +184,9 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
 
 def run_server(port=8080):
     """Run the HTTP server"""
-    with socketserver.TCPServer(("", port), ProcessedVideoHandler) as httpd:
-        print(f"Server running on http://localhost:{port}")
-        print("Open your browser and navigate to the URL above")
+    with socketserver.TCPServer(("0.0.0.0", port), ProcessedVideoHandler) as httpd:
+        print(f"Server running on http://0.0.0.0:{port}")
+        print(f"Access from other devices using: http://<CM5_IP>:{port}")
         print("Press Ctrl+C to stop the server")
         try:
             httpd.serve_forever()
