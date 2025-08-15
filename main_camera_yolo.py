@@ -358,11 +358,11 @@ class YOLOCameraStream:
         # Start threads
         self.capture_thread = threading.Thread(target=self.camera_capture_thread)
         self.processing_thread_obj = threading.Thread(target=self.processing_thread)
-        self.streaming_thread = threading.Thread(target=self.streaming_thread)
+        self.streaming_thread_obj = threading.Thread(target=self.streaming_thread)
         
         self.capture_thread.start()
         self.processing_thread_obj.start()
-        self.streaming_thread.start()
+        self.streaming_thread_obj.start()
         
         print("YOLO camera stream started")
         return True
@@ -380,8 +380,8 @@ class YOLOCameraStream:
             self.capture_thread.join(timeout=1.0)
         if hasattr(self, 'processing_thread_obj'):
             self.processing_thread_obj.join(timeout=1.0)
-        if hasattr(self, 'streaming_thread'):
-            self.streaming_thread.join(timeout=1.0)
+        if hasattr(self, 'streaming_thread_obj'):
+            self.streaming_thread_obj.join(timeout=1.0)
         
         print("YOLO camera stream stopped")
 
