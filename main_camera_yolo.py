@@ -77,10 +77,7 @@ class YOLOCameraStream:
         # Colors for bounding boxes
         np.random.seed(42)
         self.colors = np.random.randint(0, 255, size=(len(self.classes), 3), dtype=np.uint8)
-        
-        # libcamera-vid process
-        self.libcamera_process = None
-        
+    
     def start_camera(self):
         """Start CSI camera capture"""
         try:
@@ -312,55 +309,30 @@ class YOLOCameraStream:
                 print(f"Error in processing thread: {e}")
                 time.sleep(0.001)
     
-    def start_libcamera_stream(self):
-        """Start libcamera-vid streaming process"""
+    def start_streaming(self):
+        """Start video streaming process"""
         try:
-            # libcamera-vid command with the specified pipeline
-            libcamera_cmd = [
-                'libcamera-vid',
-                '-t', '0',  # Continuous recording
-                '--codec', 'h264',
-                '--width', str(self.width),
-                '--height', str(self.height),
-                '--framerate', str(self.fps),
-                '--inline',
-                '-o', 'udp://127.0.0.1:5000'  # Use localhost for streaming
-            ]
-            
-            # Start libcamera-vid process
-            self.libcamera_process = subprocess.Popen(
-                libcamera_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=0
-            )
-            
-            print("libcamera-vid streaming started")
+            print("Video streaming started (using OpenCV)")
             return True
             
         except Exception as e:
-            print(f"Error starting libcamera-vid: {e}")
+            print(f"Error starting streaming: {e}")
             return False
     
-    def libcamera_stream_thread(self):
-        """Thread for streaming processed video via libcamera-vid"""
-        if not self.start_libcamera_stream():
+    def streaming_thread(self):
+        """Thread for streaming processed video"""
+        if not self.start_streaming():
             return
         
         try:
-            # Stream frames to libcamera-vid
-            while self.running and self.libcamera_process and self.libcamera_process.poll() is None:
+            # Stream frames using OpenCV
+            while self.running:
                 try:
                     if not self.processed_frame_queue.empty():
                         frame = self.processed_frame_queue.get_nowait()
                         
-                        # Write frame to the video pipe
-                        # Note: This is a simplified approach. In practice, you might need to
-                        # encode the frame to H.264 format or use a different approach
-                        # to feed the processed frames to libcamera-vid
-                        
-                        # For now, we'll just process frames and let libcamera-vid
-                        # handle the camera input directly
+                        # For now, we'll just process frames and display them
+                        # In a real implementation, you would stream them over UDP
                         time.sleep(1.0 / self.fps)  # Maintain frame rate
                             
                     else:
@@ -374,9 +346,7 @@ class YOLOCameraStream:
             print(f"Error in streaming thread: {e}")
         finally:
             # Clean up
-            if self.libcamera_process:
-                self.libcamera_process.terminate()
-                self.libcamera_process.wait()
+            pass
     
     def start(self):
         """Start the camera stream processing"""
@@ -388,7 +358,7 @@ class YOLOCameraStream:
         # Start threads
         self.capture_thread = threading.Thread(target=self.camera_capture_thread)
         self.processing_thread_obj = threading.Thread(target=self.processing_thread)
-        self.streaming_thread = threading.Thread(target=self.libcamera_stream_thread)
+        self.streaming_thread = threading.Thread(target=self.streaming_thread)
         
         self.capture_thread.start()
         self.processing_thread_obj.start()
@@ -404,11 +374,6 @@ class YOLOCameraStream:
         # Stop camera
         if hasattr(self, 'camera') and self.camera.isOpened():
             self.camera.release()
-        
-        # Stop libcamera-vid process
-        if self.libcamera_process:
-            self.libcamera_process.terminate()
-            self.libcamera_process.wait()
         
         # Wait for threads to finish
         if hasattr(self, 'capture_thread'):

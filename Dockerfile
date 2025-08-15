@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     libcamera-tools \
-    libcamera-apps \
     gstreamer1.0-tools \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
