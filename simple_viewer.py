@@ -460,7 +460,7 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-def run_server(port=8080):
+def run_server(port=8081):
     """Run the HTTP server"""
     with socketserver.TCPServer(("0.0.0.0", port), ProcessedVideoHandler) as httpd:
         print(f"Server running on http://0.0.0.0:{port}")
