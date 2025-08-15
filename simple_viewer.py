@@ -83,7 +83,6 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                         height: auto; 
                         border-radius: 8px;
                         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                        transition: opacity 0.1s ease-in-out;
                         opacity: 1;
                     }
                     .video-container {
@@ -264,27 +263,26 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                         const frameData = frameBuffer[currentFrameIndex % frameBuffer.length];
                         const img = document.getElementById('currentFrame');
                         
-                        // Smooth transition
-                        img.style.opacity = '0';
-                        img.style.transition = 'opacity 0.1s ease-in-out';
-                        
-                        setTimeout(() => {
-                            img.src = frameData.url;
+                        // Create a new image element to preload the frame
+                        const newImg = new Image();
+                        newImg.onload = function() {
+                            // Only update the display when the new frame is fully loaded
+                            img.src = newImg.src;
                             img.style.display = 'block';
                             
-                            img.onload = function() {
-                                img.style.opacity = '1';
-                                lastFrameTime = now;
-                                currentFrameIndex++;
-                                
-                                // Update stats
-                                updateVideoStats();
-                            };
+                            lastFrameTime = now;
+                            currentFrameIndex++;
                             
-                            img.onerror = function() {
-                                console.error('Failed to load frame image');
-                            };
-                        }, 50);
+                            // Update stats
+                            updateVideoStats();
+                        };
+                        
+                        newImg.onerror = function() {
+                            console.error('Failed to load frame image');
+                        };
+                        
+                        // Start loading the new frame
+                        newImg.src = frameData.url;
                     }
                     
                     function updateVideoStats() {
@@ -332,16 +330,17 @@ class ProcessedVideoHandler(http.server.BaseHTTPRequestHandler):
                         showMessage('loadingMessage', 'Pre-loading frames...', 'loading');
                         
                         // Load initial frames
-                        for (let i = 0; i < 3; i++) {
-                            setTimeout(() => loadFrameToBuffer(), i * 200);
+                        for (let i = 0; i < 5; i++) {
+                            setTimeout(() => loadFrameToBuffer(), i * 150);
                         }
                         
                         setTimeout(() => {
                             if (frameBuffer.length > 0) {
+                                // Start continuous frame loading and display
                                 viewingInterval = setInterval(() => {
                                     loadFrameToBuffer();
                                     displayNextFrame();
-                                }, 200); // Load new frame every 200ms
+                                }, 150); // Load new frame every 150ms for smoother playback
                                 
                                 document.getElementById('status').textContent = 'Viewing...';
                                 showMessage('loadingMessage', 'Started viewing...', 'success');

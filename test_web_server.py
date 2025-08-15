@@ -8,7 +8,7 @@ import time
 
 def test_web_server():
     """Test the web server endpoints"""
-    base_url = "http://192.168.0.164:8080"
+    base_url = "http://192.168.0.164:8081"
     
     print("Testing YOLO Video Web Server...")
     print(f"Base URL: {base_url}")
