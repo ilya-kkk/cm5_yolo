@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     libcamera-tools \
-    libcamera-apps \
     gstreamer1.0-tools \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
@@ -34,19 +33,8 @@ RUN apt-get update && apt-get install -y \
     libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev \
     libgstreamer-plugins-bad1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
     libgstreamer-plugins-good1.0-dev \
-    libgstreamer-plugins-bad1.0-dev \
-    libgstreamer-plugins-ugly1.0-dev \
-    libgstreamer-libav1.0-dev \
-    libgstreamer-x1.0-dev \
-    libgstreamer-alsa1.0-dev \
-    libgstreamer-gl1.0-dev \
-    libgstreamer-gtk-3.0-dev \
-    libgstreamer-qt5-1.0-dev \
-    libgstreamer-pulseaudio1.0-dev \
     libcamera-dev \
-    libcamera-apps-dev \
     v4l-utils \
     curl \
     wget \

@@ -15,8 +15,18 @@ import signal
 import sys
 import os
 import tempfile
-from hailo_platform import HailoPlatform
-from hailo_platform import HailoROI, HailoDetection
+
+# Try to import Hailo Platform, but make it optional
+try:
+    from hailo_platform import HailoPlatform
+    from hailo_platform import HailoROI, HailoDetection
+    HAILO_AVAILABLE = True
+except ImportError:
+    print("Hailo Platform not available, using basic detection")
+    HAILO_AVAILABLE = False
+    HailoPlatform = None
+    HailoROI = None
+    HailoDetection = None
 
 class YOLOCameraStream:
     def __init__(self, hef_path, camera_index=0, width=1920, height=1080, fps=30):
@@ -28,16 +38,19 @@ class YOLOCameraStream:
         
         # Initialize Hailo platform
         self.hailo_platform = None
-        try:
-            if os.path.exists(hef_path) and os.path.getsize(hef_path) > 1000:  # Check if file exists and has reasonable size
-                self.hailo_platform = HailoPlatform()
-                self.hailo_platform.load_model(hef_path)
-                print(f"Hailo model loaded from {hef_path}")
-            else:
-                print(f"Hailo model file {hef_path} not found or too small, using basic detection")
-        except Exception as e:
-            print(f"Failed to initialize Hailo platform: {e}")
-            print("Using basic object detection instead")
+        if HAILO_AVAILABLE:
+            try:
+                if os.path.exists(hef_path) and os.path.getsize(hef_path) > 1000:  # Check if file exists and has reasonable size
+                    self.hailo_platform = HailoPlatform()
+                    self.hailo_platform.load_model(hef_path)
+                    print(f"Hailo model loaded from {hef_path}")
+                else:
+                    print(f"Hailo model file {hef_path} not found or too small, using basic detection")
+            except Exception as e:
+                print(f"Failed to initialize Hailo platform: {e}")
+                print("Using basic object detection instead")
+        else:
+            print("Hailo Platform not available, using basic detection")
         
         # Video processing variables
         self.frame_queue = queue.Queue(maxsize=10)
