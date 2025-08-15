@@ -30,7 +30,7 @@ If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm
 - Always after every code change, you must run the following commands:
   ```bash
   git add . && git commit -m '<NAME>' && git push && curl -X POST "http://127.0.0.1:8000/send_message" -H "Content-Type: application/json" -d '{"message": "<INFO>"}'&& ssh cm5 'cd cm5_yolo && git fetch --all && git reset --hard origin/main'
-- Replace <NAME> with a short description of the bug fix or feature added in this commit.
+- Replace <NAME> with a short description of the bug fix or feature added in this commit in english language
 - Replace <INFO> with a description of the bug fix or feature added in this commit in russian language
 
 ## To verify that the video streaming solution works correctly, execute the following command on the CM5:

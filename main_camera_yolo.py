@@ -18,15 +18,13 @@ import tempfile
 
 # Try to import Hailo Platform, but make it optional
 try:
-    from hailo_platform import HailoPlatform
-    from hailo_platform import HailoROI, HailoDetection
-    HAILO_AVAILABLE = True
+    import hailo_platform
+    HAILO_AVAILABLE = False  # Temporarily disable Hailo
+    print("Hailo Platform imported but temporarily disabled for testing")
 except ImportError:
     print("Hailo Platform not available, using basic detection")
     HAILO_AVAILABLE = False
-    HailoPlatform = None
-    HailoROI = None
-    HailoDetection = None
+    hailo_platform = None
 
 class YOLOCameraStream:
     def __init__(self, hef_path, camera_index=0, width=1920, height=1080, fps=30):
@@ -38,11 +36,14 @@ class YOLOCameraStream:
         
         # Initialize Hailo platform
         self.hailo_platform = None
+        self.hailo_device = None
+        self.hailo_model = None
         if HAILO_AVAILABLE:
             try:
                 if os.path.exists(hef_path) and os.path.getsize(hef_path) > 1000:  # Check if file exists and has reasonable size
-                    self.hailo_platform = HailoPlatform()
-                    self.hailo_platform.load_model(hef_path)
+                    # Create VDevice and load HEF
+                    self.hailo_device = hailo_platform.VDevice()
+                    self.hailo_model = self.hailo_device.create_infer_model(hef_path)
                     print(f"Hailo model loaded from {hef_path}")
                 else:
                     print(f"Hailo model file {hef_path} not found or too small, using basic detection")
@@ -165,10 +166,10 @@ class YOLOCameraStream:
     def process_frame(self, frame):
         """Process frame with YOLOv8 on Hailo"""
         try:
-            if self.hailo_platform is not None:
+            if self.hailo_model is not None:
                 # Use Hailo for inference
                 input_data = self.preprocess_frame(frame)
-                outputs = self.hailo_platform.infer(input_data)
+                outputs = self.hailo_model.infer(input_data)
                 detections = self.postprocess_outputs(outputs, frame.shape)
             else:
                 # Use basic motion detection as fallback
