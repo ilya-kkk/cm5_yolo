@@ -55,6 +55,9 @@ RUN pip3 install --no-cache-dir \
 # Create runtime directory
 RUN mkdir -p /tmp/runtime-docker
 
+# Add user to video group for camera access
+RUN usermod -a -G video root || true
+
 # Copy project files
 COPY . /workspace/
 

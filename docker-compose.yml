@@ -13,8 +13,11 @@ services:
       - PYTHONPATH=/workspace
       - DISPLAY=${DISPLAY:-:0}
       - XDG_RUNTIME_DIR=/tmp/runtime-docker
+      - VIDEO_GROUP_ID=44  # video group ID
     working_dir: /workspace
     privileged: true  # Required for camera and Hailo access
+    group_add:
+      - "44"  # video group
     devices:
       - /dev/video0:/dev/video0  # Camera device
       - /dev/video1:/dev/video1  # Additional video devices if needed
