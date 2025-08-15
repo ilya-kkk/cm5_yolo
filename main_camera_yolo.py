@@ -19,8 +19,8 @@ import tempfile
 # Try to import Hailo Platform, but make it optional
 try:
     import hailo_platform
-    HAILO_AVAILABLE = False  # Temporarily disable Hailo
-    print("Hailo Platform imported but temporarily disabled for testing")
+    HAILO_AVAILABLE = True  # Enable Hailo
+    print("Hailo Platform imported successfully")
 except ImportError:
     print("Hailo Platform not available, using basic detection")
     HAILO_AVAILABLE = False
@@ -272,7 +272,7 @@ class YOLOCameraStream:
             if self.libcamera_process.poll() is None:
                 print("libcamera-vid streaming started successfully")
                 
-                # Now try to open the UDP stream with OpenCV
+                # Now try to open the UDP stream with OpenCV for processing
                 # Use GStreamer pipeline to receive UDP stream
                 gst_str = f"udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! appsink"
                 
@@ -508,28 +508,36 @@ class YOLOCameraStream:
     
     def start_streaming(self):
         """Start video streaming process"""
-        try:
-            print("Video streaming started (using OpenCV + UDP)")
-            return True
-            
-        except Exception as e:
-            print(f"Error starting streaming: {e}")
-            return False
+        return self.start_processed_video_streaming()
     
     def streaming_thread(self):
         """Thread for streaming processed video"""
         if not self.start_streaming():
             return
         
+        # Initialize frame counter
+        frame_counter = 0
+        
         try:
-            # Simple streaming using OpenCV
+            # Stream processed frames using GStreamer
             while self.running:
                 try:
                     if not self.processed_frame_queue.empty():
                         frame = self.processed_frame_queue.get_nowait()
                         
-                        # For now, just process frames
-                        # In a real implementation, you would encode and stream them
+                        # Save processed frame with sequential numbering
+                        temp_file = f"/tmp/processed_frame_{frame_counter}.jpg"
+                        cv2.imwrite(temp_file, frame)
+                        
+                        # Increment counter
+                        frame_counter += 1
+                        
+                        # Keep only last 100 frames to avoid disk space issues
+                        if frame_counter > 100:
+                            old_file = f"/tmp/processed_frame_{frame_counter - 100}.jpg"
+                            if os.path.exists(old_file):
+                                os.remove(old_file)
+                        
                         time.sleep(1.0 / self.fps)  # Maintain frame rate
                             
                     else:
@@ -542,8 +550,14 @@ class YOLOCameraStream:
         except Exception as e:
             print(f"Error in streaming thread: {e}")
         finally:
-            # Clean up
-            pass
+            # Clean up temporary files
+            for i in range(max(0, frame_counter - 100), frame_counter):
+                temp_file = f"/tmp/processed_frame_{i}.jpg"
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
     
     def start(self):
         """Start the camera stream processing"""
@@ -580,6 +594,18 @@ class YOLOCameraStream:
             except Exception as e:
                 print(f"Error stopping libcamera-vid: {e}")
         
+        # Stop GStreamer process if running
+        if hasattr(self, 'gst_process') and self.gst_process:
+            try:
+                self.gst_process.terminate()
+                self.gst_process.wait(timeout=5)
+                print("GStreamer process stopped")
+            except subprocess.TimeoutExpired:
+                self.gst_process.kill()
+                print("GStreamer process killed")
+            except Exception as e:
+                print(f"Error stopping GStreamer: {e}")
+        
         # Stop camera
         if hasattr(self, 'camera') and self.camera.isOpened():
             self.camera.release()
@@ -593,6 +619,40 @@ class YOLOCameraStream:
             self.streaming_thread_obj.join(timeout=1.0)
         
         print("YOLO camera stream stopped")
+
+    def start_processed_video_streaming(self):
+        """Start streaming of processed video using libcamera-vid"""
+        try:
+            print("Starting processed video streaming...")
+            
+            # We'll use a different approach: process frames and save them,
+            # then use a GStreamer pipeline to read and stream them
+            
+            # Create a GStreamer pipeline that reads processed frames and streams them
+            gst_str = (
+                f"multifilesrc location=/tmp/processed_frame_%d.jpg loop=true ! "
+                f"jpegdec ! videoconvert ! x264enc tune=zerolatency ! "
+                f"h264parse ! rtph264pay ! udpsink host=127.0.0.1 port=5001"
+            )
+            
+            # Start GStreamer process for streaming processed video
+            self.gst_process = subprocess.Popen([
+                'gst-launch-1.0', '-q', gst_str
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            # Wait a bit for GStreamer to start
+            time.sleep(2)
+            
+            if self.gst_process.poll() is None:
+                print("Processed video streaming started successfully on port 5001")
+                return True
+            else:
+                print("Failed to start processed video streaming")
+                return False
+                
+        except Exception as e:
+            print(f"Error starting processed video streaming: {e}")
+            return False
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C signal"""
