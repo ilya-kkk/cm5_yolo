@@ -99,6 +99,10 @@ class YOLOCameraStream:
                 "/dev/video22",  # PiSP backend device
             ]
             
+            # First try GStreamer with libcamera
+            if self.try_gstreamer_camera():
+                return True
+            
             for camera_device in camera_methods:
                 print(f"Trying camera device: {camera_device}")
                 
@@ -144,6 +148,39 @@ class YOLOCameraStream:
         except Exception as e:
             print(f"Error starting camera: {e}")
             return False
+    
+    def try_gstreamer_camera(self):
+        """Try to start camera using GStreamer with libcamera"""
+        try:
+            print("Trying GStreamer with libcamera...")
+            
+            # Create GStreamer pipeline for libcamera
+            gst_str = (
+                f"libcamerasrc camera-name=camera0 ! "
+                f"video/x-raw,width={self.width},height={self.height},framerate={self.fps}/1 ! "
+                f"videoconvert ! appsink"
+            )
+            
+            self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+            
+            if self.camera.isOpened():
+                ret, test_frame = self.camera.read()
+                if ret and test_frame is not None:
+                    print(f"GStreamer camera started successfully: {self.width}x{self.height} @ {self.fps}fps")
+                    print(f"Test frame shape: {test_frame.shape}")
+                    return True
+                else:
+                    print("GStreamer camera opened but failed to read frame")
+                    self.camera.release()
+            else:
+                print("Failed to open GStreamer camera")
+                
+        except Exception as e:
+            print(f"Error with GStreamer camera: {e}")
+            if hasattr(self, 'camera'):
+                self.camera.release()
+        
+        return False
     
     def camera_capture_thread(self):
         """Thread for capturing frames from camera"""
