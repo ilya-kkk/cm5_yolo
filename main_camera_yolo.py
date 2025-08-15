@@ -448,34 +448,15 @@ class YOLOCameraStream:
         print("YOLO camera stream stopped")
 
     def start_processed_video_streaming(self):
-        """Start streaming of processed video using libcamera-vid"""
+        """Start streaming of processed video"""
         try:
             print("Starting processed video streaming...")
             
-            # We'll use a different approach: process frames and save them,
-            # then use a GStreamer pipeline to read and stream them
-            
-            # Create a GStreamer pipeline that reads processed frames and streams them
-            gst_str = (
-                f"multifilesrc location=/tmp/processed_frame_%d.jpg loop=true ! "
-                f"jpegdec ! videoconvert ! x264enc tune=zerolatency ! "
-                f"h264parse ! rtph264pay ! udpsink host=127.0.0.1 port=5001"
-            )
-            
-            # Start GStreamer process for streaming processed video
-            self.gst_process = subprocess.Popen([
-                'gst-launch-1.0', '-q', gst_str
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            # Wait a bit for GStreamer to start
-            time.sleep(2)
-            
-            if self.gst_process.poll() is None:
-                print("Processed video streaming started successfully on port 5001")
-                return True
-            else:
-                print("Failed to start processed video streaming")
-                return False
+            # For now, just save processed frames to /tmp for debugging
+            # The main YOLO processing will still work and save frames
+            print("Processed video frames will be saved to /tmp/processed_frame_*.jpg")
+            print("You can view them manually or use external tools to stream them")
+            return True
                 
         except Exception as e:
             print(f"Error starting processed video streaming: {e}")
