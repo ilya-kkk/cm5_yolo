@@ -11,6 +11,9 @@ ENV DISPLAY=:0
 # Create workspace directory
 WORKDIR ${WORKSPACE}
 
+# Add Raspberry Pi repository
+RUN echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspberrypi.list
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
