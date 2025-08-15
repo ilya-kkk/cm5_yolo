@@ -27,8 +27,17 @@ class YOLOCameraStream:
         self.fps = fps
         
         # Initialize Hailo platform
-        self.hailo_platform = HailoPlatform()
-        self.hailo_platform.load_model(hef_path)
+        self.hailo_platform = None
+        try:
+            if os.path.exists(hef_path) and os.path.getsize(hef_path) > 1000:  # Check if file exists and has reasonable size
+                self.hailo_platform = HailoPlatform()
+                self.hailo_platform.load_model(hef_path)
+                print(f"Hailo model loaded from {hef_path}")
+            else:
+                print(f"Hailo model file {hef_path} not found or too small, using basic detection")
+        except Exception as e:
+            print(f"Failed to initialize Hailo platform: {e}")
+            print("Using basic object detection instead")
         
         # Video processing variables
         self.frame_queue = queue.Queue(maxsize=10)
@@ -62,14 +71,20 @@ class YOLOCameraStream:
     def start_camera(self):
         """Start CSI camera capture"""
         try:
-            # Use libcamera for CSI camera
-            self.camera = cv2.VideoCapture(f"libcamera://{self.camera_index}")
+            # Try direct device access first, then fallback to libcamera
+            camera_device = f"/dev/video{self.camera_index}"
+            if os.path.exists(camera_device):
+                self.camera = cv2.VideoCapture(camera_device)
+            else:
+                # Fallback to libcamera
+                self.camera = cv2.VideoCapture(f"libcamera://{self.camera_index}")
+            
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.camera.set(cv2.CAP_PROP_FPS, self.fps)
             
             if not self.camera.isOpened():
-                print(f"Failed to open camera {self.camera_index}")
+                print(f"Failed to open camera {self.camera_index} at {camera_device}")
                 return False
                 
             print(f"Camera started: {self.width}x{self.height} @ {self.fps}fps")
@@ -102,14 +117,14 @@ class YOLOCameraStream:
     def process_frame(self, frame):
         """Process frame with YOLOv8 on Hailo"""
         try:
-            # Preprocess frame for YOLO
-            input_data = self.preprocess_frame(frame)
-            
-            # Run inference on Hailo
-            outputs = self.hailo_platform.infer(input_data)
-            
-            # Postprocess results
-            detections = self.postprocess_outputs(outputs, frame.shape)
+            if self.hailo_platform is not None:
+                # Use Hailo for inference
+                input_data = self.preprocess_frame(frame)
+                outputs = self.hailo_platform.infer(input_data)
+                detections = self.postprocess_outputs(outputs, frame.shape)
+            else:
+                # Use basic motion detection as fallback
+                detections = self.basic_motion_detection(frame)
             
             # Draw detections on frame
             processed_frame = self.draw_detections(frame, detections)
@@ -176,13 +191,55 @@ class YOLOCameraStream:
         
         return detections
     
+    def basic_motion_detection(self, frame):
+        """Basic motion detection using frame differencing"""
+        if not hasattr(self, 'prev_frame'):
+            self.prev_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return []
+        
+        # Convert current frame to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate frame difference
+        frame_diff = cv2.absdiff(self.prev_frame, gray)
+        
+        # Apply threshold to get motion mask
+        _, motion_mask = cv2.threshold(frame_diff, 25, 255, cv2.THRESH_BINARY)
+        
+        # Find contours of motion regions
+        contours, _ = cv2.findContours(motion_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter contours by area
+        detections = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 500:  # Minimum area threshold
+                x, y, w, h = cv2.boundingRect(contour)
+                detections.append({
+                    'bbox': [x, y, x + w, y + h],
+                    'confidence': 0.8,
+                    'class_id': 0,  # 0 = person (generic motion)
+                    'class_name': 'motion'
+                })
+        
+        # Update previous frame
+        self.prev_frame = gray
+        
+        return detections
+    
     def draw_detections(self, frame, detections):
         """Draw bounding boxes and labels on frame"""
         for detection in detections:
             bbox = detection['bbox']
             confidence = detection['confidence']
-            class_name = detection['class_name']
-            class_id = detection['class_id']
+            
+            # Handle both Hailo and basic motion detections
+            if 'class_name' in detection:
+                class_name = detection['class_name']
+                class_id = detection['class_id']
+            else:
+                class_name = 'motion'
+                class_id = 0
             
             # Get color for this class
             color = tuple(map(int, self.colors[class_id % len(self.colors)]))
@@ -254,7 +311,7 @@ class YOLOCameraStream:
                 '--height', str(self.height),
                 '--framerate', str(self.fps),
                 '--inline',
-                '-o', 'udp://192.168.0.173:5000'
+                '-o', 'udp://127.0.0.1:5000'  # Use localhost for streaming
             ]
             
             # Start libcamera-vid process

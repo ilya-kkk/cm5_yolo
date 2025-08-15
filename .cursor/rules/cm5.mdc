@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Rules for Raspberry Pi CM5 Project
+
+## Context
+- This project is designed **exclusively** for the **Raspberry Pi Compute Module 5 (CM5)**.
+- All code execution must happen on the remote CM5 device via SSH and inside Docker Compose.
+
+## Hardware Detection Rules
+When analyzing hardware, check `/boot/firmware/config.txt` and the system for the following:
+- `dtparam=pciex1_gen=3` → PCIe Gen3 enabled (typical for CM5), Hailo-8L accelerator connected via PCIe.
+- `dtoverlay=ov5647,cam0` → OV5647 camera module attached on **MIPI0** interface.
+- `fan_temp*` parameters → Active fan temperature control is configured.
+- `start_x=1` → GPU camera codec is enabled.
+- `camera_auto_detect=0` → Automatic camera detection is disabled.
+
+If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm the target hardware.
+
+## Command Execution Rules
+- Always run commands on the CM5 via SSH.
+- Always execute code inside a **Docker Compose** environment.
+- Use the format:
+  ```bash
+  ssh cm5 'docker compose run <SERVICE> <COMMAND>'
+
+## To verify that the video streaming solution works correctly, execute the following command on the CM5:
+- run on current pc:
+  ```bash
+  gst-launch-1.0 -v udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! videoflip method=rotate-180 ! autovideosink
+
