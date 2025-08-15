@@ -2,7 +2,7 @@
 """
 Main YOLOv8 Camera Stream with Hailo 8L
 Processes CSI camera feed using YOLOv8 model on Hailo 8L accelerator
-and streams processed video via libcamera-vid
+and streams processed video 
 """
 
 import cv2
