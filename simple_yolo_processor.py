@@ -95,15 +95,18 @@ class SimpleYOLOProcessor:
             return False
     
     def start_output_stream(self):
-        """Start streaming processed video"""
+        """Start streaming processed video using multifilesrc"""
         try:
-            print("Starting output stream...")
+            print("Starting output stream with multifilesrc...")
             
-            # Create GStreamer pipeline for output streaming
+            # Create GStreamer pipeline that reads saved frames and streams them
             gst_str = (
-                f"appsrc ! videoconvert ! x264enc tune=zerolatency ! "
+                f"multifilesrc location=/tmp/yolo_frame_%04d.jpg loop=true ! "
+                f"jpegdec ! videoconvert ! x264enc tune=zerolatency ! "
                 f"h264parse ! rtph264pay ! udpsink host=127.0.0.1 port=5001"
             )
+            
+            print(f"GStreamer command: {gst_str}")
             
             # Start GStreamer process
             self.gst_process = subprocess.Popen([
@@ -111,13 +114,16 @@ class SimpleYOLOProcessor:
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             # Wait for GStreamer to start
-            time.sleep(2)
+            time.sleep(3)
             
             if self.gst_process.poll() is None:
                 print("Output streaming started successfully on port 5001")
                 return True
             else:
                 print("Failed to start output streaming")
+                stdout, stderr = self.gst_process.communicate()
+                print(f"stdout: {stdout.decode()}")
+                print(f"stderr: {stderr.decode()}")
                 return False
                 
         except Exception as e:
@@ -288,19 +294,29 @@ class SimpleYOLOProcessor:
     
     def output_thread(self):
         """Thread for streaming processed frames"""
-        if not self.start_output_stream():
-            return
-        
         try:
             while self.running:
                 if not self.processed_frame_queue.empty():
                     frame = self.processed_frame_queue.get_nowait()
                     
-                    # For now, just save frames to disk
-                    # In a more sophisticated implementation, you'd stream them directly
-                    temp_file = f"/tmp/yolo_frame_{int(time.time() * 1000)}.jpg"
+                    # Save processed frame with sequential numbering
+                    frame_counter = getattr(self, 'frame_counter', 0)
+                    temp_file = f"/tmp/yolo_frame_{frame_counter:04d}.jpg"
                     cv2.imwrite(temp_file, frame)
                     
+                    # Increment counter
+                    self.frame_counter = frame_counter + 1
+                    
+                    # Keep only last 100 frames to avoid disk space issues
+                    if frame_counter > 100:
+                        old_file = f"/tmp/yolo_frame_{frame_counter - 100:04d}.jpg"
+                        if os.path.exists(old_file):
+                            try:
+                                os.remove(old_file)
+                            except:
+                                pass
+                    
+                    print(f"Saved processed frame: {temp_file}")
                     time.sleep(1.0 / self.fps)
                 else:
                     time.sleep(0.001)
