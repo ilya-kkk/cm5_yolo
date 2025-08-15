@@ -94,7 +94,7 @@ class YOLOCameraStream:
             udp_url = "udp://127.0.0.1:5000"
             
             # Use GStreamer to read from UDP stream
-            gst_str = f"udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! appsink"
+            gst_str = f"udpsrc port=5000 ! jpegdec ! videoconvert ! appsink"
             
             print(f"Trying GStreamer UDP stream: {gst_str}")
             
