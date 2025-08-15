@@ -88,6 +88,14 @@ class YOLOCameraStream:
                 "/dev/video0",  # Default video device
                 "/dev/video1",  # Alternative video device
                 "/dev/video2",  # Alternative video device
+                "/dev/video3",  # Alternative video device
+                "/dev/video4",  # Alternative video device
+                "/dev/video5",  # Alternative video device
+                "/dev/video6",  # Alternative video device
+                "/dev/video7",  # Alternative video device
+                "/dev/video20",  # PiSP backend device
+                "/dev/video21",  # PiSP backend device
+                "/dev/video22",  # PiSP backend device
             ]
             
             for camera_device in camera_methods:
@@ -111,6 +119,7 @@ class YOLOCameraStream:
                         ret, test_frame = self.camera.read()
                         if ret and test_frame is not None:
                             print(f"Camera started successfully: {camera_device} - {self.width}x{self.height} @ {self.fps}fps")
+                            print(f"Test frame shape: {test_frame.shape}")
                             return True
                         else:
                             print(f"Camera opened but failed to read frame from {camera_device}")
