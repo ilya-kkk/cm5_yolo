@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Main camera YOLO processing script for CM5 with Hailo-8L
-This script generates test video stream while solving H.264 decoding issues
+This script properly handles incomplete H.264 from libcamera-vid and runs real YOLO inference
 """
 
 import cv2
@@ -51,6 +51,19 @@ class HailoYOLOProcessor:
         
         # Initialize Hailo
         self.init_hailo()
+        
+        # Create SPS/PPS data for H.264
+        self.create_h264_headers()
+        
+    def create_h264_headers(self):
+        """Create SPS and PPS data for H.264 stream"""
+        # SPS for 640x480, 30fps, baseline profile
+        self.sps_data = b'\x00\x00\x00\x01\x67\x42\x00\x1E\x95\xA0\x28\x0F\x68\x40\x00\x00\x03\x00\x40\x00\x00\x0F\x03\xC6\x0C\x44\x80'
+        
+        # PPS for baseline profile
+        self.pps_data = b'\x00\x00\x00\x01\x68\xCE\x3C\x80'
+        
+        print("✅ Created H.264 SPS/PPS headers")
         
     def init_hailo(self):
         """Initialize Hailo-8L device and load YOLO model"""
@@ -123,79 +136,102 @@ class HailoYOLOProcessor:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def create_test_frame(self):
-        """Create a test frame with simulated YOLO processing"""
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    def fix_h264_stream(self, h264_data):
+        """Fix incomplete H.264 stream by adding SPS/PPS headers"""
+        try:
+            # Find NAL unit start codes
+            start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
+            
+            # Check if data already has SPS/PPS
+            has_sps = b'\x00\x00\x00\x01\x67' in h264_data or b'\x00\x00\x01\x67' in h264_data
+            has_pps = b'\x00\x00\x00\x01\x68' in h264_data or b'\x00\x00\x01\x68' in h264_data
+            
+            if has_sps and has_pps:
+                print("✅ H.264 stream already has SPS/PPS")
+                return h264_data
+            
+            # Create fixed H.264 stream
+            fixed_stream = b''
+            
+            # Add SPS if missing
+            if not has_sps:
+                fixed_stream += self.sps_data
+                print("🔧 Added SPS to H.264 stream")
+            
+            # Add PPS if missing
+            if not has_pps:
+                fixed_stream += self.pps_data
+                print("🔧 Added PPS to H.264 stream")
+            
+            # Add original data
+            fixed_stream += h264_data
+            
+            print(f"🔧 Fixed H.264 stream: {len(fixed_stream)} bytes (was {len(h264_data)} bytes)")
+            return fixed_stream
+            
+        except Exception as e:
+            print(f"⚠️ Error fixing H.264 stream: {e}")
+            return h264_data
+    
+    def decode_h264_with_ffmpeg(self, h264_data):
+        """Decode H.264 using FFmpeg with fixed stream"""
+        try:
+            # Fix the H.264 stream
+            fixed_h264 = self.fix_h264_stream(h264_data)
+            
+            # Write fixed H.264 data to temporary file
+            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
+                temp_file.write(fixed_h264)
+                temp_file_path = temp_file.name
+            
+            # Use FFmpeg to decode H.264 to JPEG
+            jpeg_output_path = temp_file_path + '.jpg'
+            
+            # FFmpeg command with proper parameters
+            cmd = [
+                'ffmpeg', '-y',  # Overwrite output files
+                '-f', 'h264',    # Input format
+                '-i', temp_file_path,  # Input file
+                '-vframes', '1',       # Extract only 1 frame
+                '-q:v', '2',           # High quality
+                '-pix_fmt', 'yuv420p', # Standard pixel format
+                jpeg_output_path        # Output file
+            ]
+            
+            # Run FFmpeg
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            
+            if result.returncode == 0 and os.path.exists(jpeg_output_path):
+                # Read the JPEG frame
+                frame = cv2.imread(jpeg_output_path)
+                
+                # Clean up temp files
+                try:
+                    os.unlink(temp_file_path)
+                    os.unlink(jpeg_output_path)
+                except:
+                    pass
+                
+                if frame is not None and frame.size > 0:
+                    print(f"✅ Successfully decoded H.264 frame: {frame.shape}")
+                    return frame
+                else:
+                    print("⚠️ Decoded frame is empty")
+            else:
+                print(f"❌ FFmpeg failed: {result.stderr.decode()}")
+            
+            # Clean up temp files
+            try:
+                os.unlink(temp_file_path)
+                if os.path.exists(jpeg_output_path):
+                    os.unlink(jpeg_output_path)
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"⚠️ FFmpeg H.264 decode error: {e}")
         
-        # Add timestamp
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(frame, f"Time: {timestamp}", (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Add FPS
-        cv2.putText(frame, f"FPS: {self.current_fps:.1f}", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        
-        # Add status
-        cv2.putText(frame, "YOLO Processing Active (Test Mode)", (10, 90), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
-        
-        # Add frame counter
-        cv2.putText(frame, f"Frame: {self.frame_count}", (10, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        
-        # Add H.264 buffer info
-        cv2.putText(frame, f"H.264 Buffer: {len(self.h264_buffer)} bytes", (10, 150), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        
-        # Add animated elements
-        current_time = time.time()
-        
-        # Animated circle
-        circle_radius = int(20 + 15 * np.sin(current_time * 2))
-        circle_x = int(320 + 100 * np.cos(current_time * 1.5))
-        circle_y = int(240 + 80 * np.sin(current_time * 1.2))
-        cv2.circle(frame, (circle_x, circle_y), circle_radius, (0, 255, 255), -1)
-        
-        # Animated rectangle
-        rect_x = int(50 + 30 * np.sin(current_time * 3))
-        rect_y = int(200 + 20 * np.cos(current_time * 2.5))
-        cv2.rectangle(frame, (rect_x, rect_y), (rect_x + 100, rect_y + 60), (255, 0, 0), 3)
-        
-        # Animated text
-        text_x = int(400 + 50 * np.sin(current_time * 1.8))
-        cv2.putText(frame, "LIVE", (text_x, 400), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-        
-        # Simulate YOLO detections with animation
-        if int(current_time * 2) % 4 == 0:
-            cv2.putText(frame, "Person Detected", (10, 180), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.rectangle(frame, (100, 180), (200, 280), (0, 255, 0), 2)
-            cv2.putText(frame, "Confidence: 0.87", (100, 170), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
-        if int(current_time * 3) % 5 == 0:
-            cv2.putText(frame, "Car Detected", (10, 210), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-            cv2.rectangle(frame, (300, 210), (400, 250), (255, 0, 0), 2)
-            cv2.putText(frame, "Confidence: 0.92", (300, 200), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-        
-        if int(current_time * 4) % 6 == 0:
-            cv2.putText(frame, "Dog Detected", (10, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-            cv2.rectangle(frame, (200, 240), (280, 300), (255, 255, 0), 2)
-            cv2.putText(frame, "Confidence: 0.78", (200, 230), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
-        
-        # Add motion detection indicator
-        if int(current_time * 5) % 3 == 0:
-            cv2.putText(frame, "Motion Detected", (10, 270), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            cv2.circle(frame, (500, 270), 15, (0, 0, 255), -1)
-        
-        return frame
+        return None
     
     def run_yolo_inference(self, frame):
         """Run YOLO inference using Hailo-8L"""
@@ -274,20 +310,9 @@ class HailoYOLOProcessor:
         cv2.putText(processed_frame, f"Frame: {self.frame_count}", (10, 120), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         
-        # Simulate detections with animation
-        current_time = time.time()
-        
-        # Simulate person detection
-        if int(current_time * 2) % 4 == 0:
-            cv2.putText(processed_frame, "Person Detected", (10, 150), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.rectangle(processed_frame, (100, 150), (200, 250), (0, 255, 0), 2)
-        
-        # Simulate car detection
-        if int(current_time * 3) % 5 == 0:
-            cv2.putText(processed_frame, "Car Detected", (10, 180), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-            cv2.rectangle(processed_frame, (300, 180), (400, 220), (255, 0, 0), 2)
+        # Add camera info
+        cv2.putText(processed_frame, "Real Camera Stream Active", (10, 150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
         return processed_frame
     
@@ -354,7 +379,7 @@ class HailoYOLOProcessor:
         """Process incoming H.264 stream and extract frames"""
         print("📹 Starting H.264 stream processing...")
         print("⏳ Waiting for libcamera-vid stream from host...")
-        print("🎬 Generating test video stream while solving H.264 issues...")
+        print("🔧 Will fix incomplete H.264 stream by adding SPS/PPS headers")
         
         while self.running:
             try:
@@ -364,41 +389,42 @@ class HailoYOLOProcessor:
                 if data:
                     # Add to H.264 buffer
                     self.h264_buffer += data
-                    print(f"📦 Received {len(data)} bytes, total buffer: {len(self.h264_buffer)} bytes")
                     
-                    # For now, just generate test frames
-                    # TODO: Implement proper H.264 decoding
-                
-                # Generate test frame every 100ms for demonstration
-                current_time = time.time()
-                if not hasattr(self, 'last_test_frame_time') or current_time - self.last_test_frame_time >= 0.1:
-                    test_frame = self.create_test_frame()
-                    self.save_processed_frame(test_frame)
-                    self.last_test_frame_time = current_time
-                    
-                    # Update FPS counter for test frames
-                    self.fps_counter += 1
-                    if current_time - self.fps_start_time >= 1.0:
-                        self.current_fps = self.fps_counter
-                        self.fps_counter = 0
-                        self.fps_start_time = current_time
-                        print(f"🎬 Test Video FPS: {self.current_fps}")
+                    # Try to decode frame when we have enough data
+                    if len(self.h264_buffer) > 10000:  # Minimum size for H.264 frame
+                        print(f"📦 Received {len(data)} bytes, total buffer: {len(self.h264_buffer)} bytes")
+                        print(f"🔧 Attempting to decode H.264 frame...")
+                        
+                        # Try to decode with fixed H.264 stream
+                        frame = self.decode_h264_with_ffmpeg(self.h264_buffer)
+                        
+                        if frame is not None:
+                            print(f"🎯 SUCCESS! Decoded real camera frame: {frame.shape}")
+                            
+                            # Run YOLO inference
+                            processed_frame = self.run_yolo_inference(frame)
+                            
+                            # Save processed frame
+                            if self.save_processed_frame(processed_frame):
+                                # Update FPS counter
+                                self.fps_counter += 1
+                                current_time = time.time()
+                                
+                                if current_time - self.fps_start_time >= 1.0:
+                                    self.current_fps = self.fps_counter
+                                    self.fps_counter = 0
+                                    self.fps_start_time = current_time
+                                    print(f"🎯 Real Camera YOLO Processing FPS: {self.current_fps}")
+                            
+                            # Clear buffer after successful decode
+                            self.h264_buffer = b''
+                        else:
+                            print(f"⚠️ Failed to decode frame, keeping buffer for next attempt")
+                            # Keep some data for next attempt
+                            if len(self.h264_buffer) > 1024 * 1024:  # 1MB limit
+                                self.h264_buffer = self.h264_buffer[-512 * 1024:]  # Keep last 512KB
                     
             except socket.timeout:
-                # Generate test frame even when no UDP data
-                current_time = time.time()
-                if not hasattr(self, 'last_test_frame_time') or current_time - self.last_test_frame_time >= 0.1:
-                    test_frame = self.create_test_frame()
-                    self.save_processed_frame(test_frame)
-                    self.last_test_frame_time = current_time
-                    
-                    # Update FPS counter for test frames
-                    self.fps_counter += 1
-                    if current_time - self.fps_start_time >= 1.0:
-                        self.current_fps = self.fps_counter
-                        self.fps_counter = 0
-                        self.fps_start_time = current_time
-                        print(f"🎬 Test Video FPS: {self.current_fps}")
                 continue
             except Exception as e:
                 if self.running:
@@ -412,7 +438,7 @@ class HailoYOLOProcessor:
         print("🎯 Starting Hailo YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 Real YOLO processing with Hailo-8L")
-        print("🎬 Test video stream active while solving H.264 issues")
+        print("🔧 Will fix incomplete H.264 stream from libcamera-vid")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
@@ -430,7 +456,6 @@ class HailoYOLOProcessor:
         print("📱 Video stream available at UDP://127.0.0.1:5000")
         print("🌐 Web interface available at http://localhost:8080")
         print("💾 Processed frames saved to /tmp/latest_yolo_frame.jpg")
-        print("🎬 Test video stream active - check web interface!")
         print("")
         print("🔧 To start video stream, run on the host:")
         print("   libcamera-vid -t 0 --codec h264 --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
