@@ -32,17 +32,23 @@ services:
     security_opt:
       - seccomp:unconfined  # Required for some camera operations
 
-  webrtc-viewer:
+  video-web-service:
     build: .
-    container_name: hailo_webrtc_viewer
+    container_name: hailo_video_web_service
     volumes:
       - .:/workspace
-      - /tmp:/tmp  # Access to processed frames
+      - /tmp:/tmp
     environment:
       - PYTHONPATH=/workspace
     working_dir: /workspace
-    network_mode: "host"  # Required for web access
-    restart: unless-stopped
-    command: ["python3", "/workspace/webrtc_viewer.py"]
+    ports:
+      - "8084:8084"
     depends_on:
-      - yolo-camera-stream 
+      - yolo-camera-stream
+    networks:
+      - yolo_network
+    command: ["python3", "video_web_service.py"]
+
+networks:
+  yolo_network:
+    driver: bridge 
