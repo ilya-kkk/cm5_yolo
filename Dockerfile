@@ -19,6 +19,18 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     ffmpeg \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    gstreamer1.0-x \
+    gstreamer1.0-alsa \
+    gstreamer1.0-gl \
+    gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 \
+    gstreamer1.0-pulseaudio \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -28,8 +40,12 @@ WORKDIR /workspace
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy source code
 COPY . .
 
-# Set default command
-CMD ["python3", "main_camera_yolo.py"] 
+# Set environment variables
+ENV PYTHONPATH=/workspace
+ENV GST_DEBUG=0
+
+# Default command
+CMD ["python3", "/workspace/main_camera_yolo.py"] 
