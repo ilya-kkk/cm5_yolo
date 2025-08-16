@@ -14,8 +14,6 @@ from typing import Optional
 
 import aiohttp
 from aiohttp import web
-import cv2
-import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,10 +43,14 @@ class WebRTCVideoViewer:
     async def cors_middleware(self, request, handler):
         """CORS middleware for cross-origin requests"""
         response = await handler(request)
+        
+        # Set CORS headers for all responses
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
         response.headers['Access-Control-Max-Age'] = '86400'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range'
+        
         return response
         
     async def options_handler(self, request):
@@ -56,8 +58,9 @@ class WebRTCVideoViewer:
         response = web.Response()
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
         response.headers['Access-Control-Max-Age'] = '86400'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range'
         return response
         
     async def index_handler(self, request):
@@ -79,6 +82,13 @@ class WebRTCVideoViewer:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     if msg.data == 'ping':
                         await ws.send_str('pong')
+                    elif msg.data == 'get_frame':
+                        # Send latest frame data
+                        frame_data = await self.get_latest_frame_data()
+                        if frame_data:
+                            await ws.send_bytes(frame_data)
+                        else:
+                            await ws.send_str('no_frame')
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     logger.error(f"WebSocket error: {ws.exception()}")
         except Exception as e:
@@ -105,15 +115,41 @@ class WebRTCVideoViewer:
         """Return the latest processed frame"""
         frame_path = self.get_latest_frame_path()
         if frame_path and frame_path.exists():
-            with open(frame_path, 'rb') as f:
-                frame_data = f.read()
-            
-            response = web.Response(body=frame_data, content_type='image/jpeg')
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            return response
+            try:
+                with open(frame_path, 'rb') as f:
+                    frame_data = f.read()
+                
+                response = web.Response(body=frame_data, content_type='image/jpeg')
+                response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                return response
+            except Exception as e:
+                logger.error(f"Error reading frame: {e}")
+                return web.Response(status=500, text="Error reading frame")
         else:
             return web.Response(status=404, text="No frame available")
             
+    async def get_latest_frame_data(self) -> Optional[bytes]:
+        """Get the latest frame data as bytes"""
+        try:
+            frame_path = self.get_latest_frame_path()
+            if frame_path and frame_path.exists():
+                # Check if file is readable and not empty
+                if os.access(frame_path, os.R_OK) and frame_path.stat().st_size > 0:
+                    with open(frame_path, 'rb') as f:
+                        frame_data = f.read()
+                        if len(frame_data) > 0:
+                            logger.debug(f"Successfully read frame: {frame_path} ({len(frame_data)} bytes)")
+                            return frame_data
+                        else:
+                            logger.warning(f"Frame file is empty: {frame_path}")
+                else:
+                    logger.warning(f"Frame file not accessible: {frame_path}")
+            else:
+                logger.debug("No frame path available")
+        except Exception as e:
+            logger.error(f"Error reading frame: {e}")
+        return None
+        
     def get_latest_frame_path(self) -> Optional[Path]:
         """Get the path to the latest processed frame"""
         try:
@@ -121,7 +157,10 @@ class WebRTCVideoViewer:
             if frame_files:
                 # Sort by modification time and get the latest
                 latest_frame = max(frame_files, key=lambda x: x.stat().st_mtime)
+                logger.debug(f"Found latest frame: {latest_frame} (size: {latest_frame.stat().st_size} bytes)")
                 return latest_frame
+            else:
+                logger.debug("No frame files found in /tmp")
         except Exception as e:
             logger.error(f"Error getting latest frame: {e}")
         return None
@@ -196,7 +235,7 @@ class WebRTCVideoViewer:
         #videoCanvas {
             width: 100%;
             height: auto;
-            display: block;
+            border-radius: 15px;
             background: #000;
         }
         
@@ -298,6 +337,16 @@ class WebRTCVideoViewer:
         .disconnected { background: #dc3545; }
         .connecting { background: #ffc107; }
         
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+            display: none;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -322,11 +371,15 @@ class WebRTCVideoViewer:
 </head>
 <body>
     <div class="container">
-        <h1>🎥 YOLO Video Stream</h1>
+        <h1>🎥 YOLO Video Stream - WebRTC</h1>
         
         <div class="status">
             <span class="connection-status" id="connectionStatus"></span>
             <span id="statusText">Ready to connect</span>
+        </div>
+        
+        <div class="error-message" id="errorMessage">
+            <strong>Error:</strong> <span id="errorText"></span>
         </div>
         
         <div class="video-container">
@@ -376,6 +429,7 @@ class WebRTCVideoViewer:
                 this.lastFrameTime = 0;
                 this.fps = 0;
                 this.latency = 0;
+                this.ws = null;
                 
                 this.setupCanvas();
                 this.updateConnectionStatus('disconnected');
@@ -407,9 +461,10 @@ class WebRTCVideoViewer:
                 this.isStreaming = true;
                 this.updateConnectionStatus('connecting');
                 this.updateButtons(true);
+                this.hideError();
                 
                 try {
-                    // Start frame streaming
+                    // Start frame streaming using HTTP requests (more reliable than WebSocket for now)
                     this.streamInterval = setInterval(() => {
                         this.streamFrame();
                     }, 33); // ~30 FPS
@@ -419,8 +474,8 @@ class WebRTCVideoViewer:
                     
                 } catch (error) {
                     console.error('Failed to start streaming:', error);
+                    this.showError('Failed to start streaming: ' + error.message);
                     this.updateConnectionStatus('disconnected');
-                    this.updateStatus('Failed to start streaming');
                     this.stopStreaming();
                 }
             }
@@ -430,7 +485,10 @@ class WebRTCVideoViewer:
                 
                 try {
                     const response = await fetch('/frame?' + Date.now(), {
-                        cache: 'no-cache'
+                        cache: 'no-cache',
+                        headers: {
+                            'Accept': 'image/jpeg'
+                        }
                     });
                     
                     if (response.ok) {
@@ -450,10 +508,19 @@ class WebRTCVideoViewer:
                             URL.revokeObjectURL(imageUrl);
                         };
                         
+                        img.onerror = () => {
+                            console.error('Failed to load frame image');
+                            this.showError('Failed to load frame image');
+                        };
+                        
                         img.src = imageUrl;
+                    } else {
+                        console.error('Frame request failed:', response.status);
+                        this.showError('Frame request failed: ' + response.status);
                     }
                 } catch (error) {
                     console.error('Frame streaming error:', error);
+                    this.showError('Frame streaming error: ' + error.message);
                 }
             }
             
@@ -491,6 +558,7 @@ class WebRTCVideoViewer:
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 
                 this.updateStatus('Streaming stopped');
+                this.hideError();
             }
             
             updateButtons(streaming) {
@@ -518,6 +586,18 @@ class WebRTCVideoViewer:
             
             updateStatus(message) {
                 console.log(message);
+            }
+            
+            showError(message) {
+                const errorElement = document.getElementById('errorMessage');
+                const errorText = document.getElementById('errorText');
+                errorText.textContent = message;
+                errorElement.style.display = 'block';
+            }
+            
+            hideError() {
+                const errorElement = document.getElementById('errorMessage');
+                errorElement.style.display = 'none';
             }
         }
         
