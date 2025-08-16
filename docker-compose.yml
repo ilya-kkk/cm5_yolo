@@ -30,4 +30,18 @@ services:
       - SYS_ADMIN  # Required for some system operations
       - SYS_RAWIO  # Required for device access
     security_opt:
-      - seccomp:unconfined  # Required for some camera operations 
+      - seccomp:unconfined  # Required for some camera operations
+
+  web-stream-service:
+    build: .
+    container_name: hailo_web_stream_service
+    volumes:
+      - .:/workspace
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace
+    network_mode: "host"  # Required to access UDP port 5000
+    restart: unless-stopped
+    command: ["python3", "/workspace/web_stream_service.py"]
+    depends_on:
+      - yolo-camera-stream 
