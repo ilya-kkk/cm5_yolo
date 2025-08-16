@@ -13,7 +13,6 @@ from typing import Optional
 
 import aiohttp
 from aiohttp import web
-from aiohttp_cors import setup as cors_setup, ResourceOptions, CorsViewMixin
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +23,6 @@ class WebRTCVideoViewer:
         self.port = port
         self.app = web.Application()
         self.setup_routes()
-        self.setup_cors()
         
     def setup_routes(self):
         """Setup web routes"""
@@ -32,20 +30,17 @@ class WebRTCVideoViewer:
         self.app.router.add_get('/status', self.status_handler)
         self.app.router.add_get('/frame', self.frame_handler)
         
-    def setup_cors(self):
-        """Setup CORS for all routes"""
-        cors = cors_setup(self.app, defaults={
-            "*": ResourceOptions(
-                allow_credentials=True,
-                expose_headers="*",
-                allow_headers="*",
-                allow_methods="*"
-            )
-        })
+        # Add CORS headers to all responses
+        self.app.middlewares.append(self.cors_middleware)
         
-        # Add CORS to all routes
-        for route in list(self.app.router.routes()):
-            cors.add(route)
+    @web.middleware
+    async def cors_middleware(self, request, handler):
+        """Simple CORS middleware"""
+        response = await handler(request)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = '*'
+        return response
         
     async def index_handler(self, request):
         """Serve the main HTML page"""
