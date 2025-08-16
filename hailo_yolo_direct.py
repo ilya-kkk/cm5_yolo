@@ -23,7 +23,7 @@ from pathlib import Path
 # Hailo imports
 try:
     import hailo_platform
-    from hailo_platform import Device, HEF, ConfiguredNetwork, InputVStream, OutputVStream
+    from hailo_platform import Device, HEF, InputVStreams, OutputVStreams
     HAILO_AVAILABLE = True
     print("✅ Hailo platform imported successfully")
 except ImportError as e:
