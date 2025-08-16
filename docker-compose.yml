@@ -7,7 +7,8 @@ services:
     volumes:
       - .:/workspace
       - /dev:/dev  # Access to camera devices
-      - /tmp:/tmp  # Access to temp files
+      - /tmp:/tmp  # Access to temp files for frame sharing
+      - /home/cm5/yolo_models:/home/cm5/yolo_models  # Access to YOLO models
     environment:
       - PYTHONPATH=/workspace
     working_dir: /workspace
