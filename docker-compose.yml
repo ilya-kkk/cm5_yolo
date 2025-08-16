@@ -30,25 +30,4 @@ services:
       - SYS_ADMIN  # Required for some system operations
       - SYS_RAWIO  # Required for device access
     security_opt:
-      - seccomp:unconfined  # Required for some camera operations
-
-  video-web-service:
-    build: .
-    container_name: hailo_video_web_service
-    volumes:
-      - .:/workspace
-      - /tmp:/tmp
-    environment:
-      - PYTHONPATH=/workspace
-    working_dir: /workspace
-    ports:
-      - "8085:8085"
-    depends_on:
-      - yolo-camera-stream
-    networks:
-      - yolo_network
-    command: ["python3", "video_web_service.py"]
-
-networks:
-  yolo_network:
-    driver: bridge 
+      - seccomp:unconfined  # Required for some camera operations 
