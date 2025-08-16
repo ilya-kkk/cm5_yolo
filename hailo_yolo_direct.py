@@ -89,6 +89,32 @@ class HailoYOLOProcessor:
                     except Exception as e:
                         print(f"⚠️ Device.scan() error: {e}")
                 
+                # Try alternative method - use pyhailort directly
+                if not self.hailo_device:
+                    print("🔍 Trying pyhailort direct access...")
+                    try:
+                        import hailo_platform.pyhailort as pyhailort
+                        print("✅ pyhailort imported directly")
+                        
+                        # Try to create device using pyhailort
+                        if hasattr(pyhailort, 'Device'):
+                            try:
+                                self.hailo_device = pyhailort.Device()
+                                print(f"✅ Created pyhailort Device: {self.hailo_device}")
+                            except Exception as e:
+                                print(f"⚠️ pyhailort Device creation error: {e}")
+                        
+                        # Try VDevice
+                        if not self.hailo_device and hasattr(pyhailort, 'VDevice'):
+                            try:
+                                self.hailo_device = pyhailort.VDevice()
+                                print(f"✅ Created pyhailort VDevice: {self.hailo_device}")
+                            except Exception as e:
+                                print(f"⚠️ pyhailort VDevice creation error: {e}")
+                                
+                    except Exception as e:
+                        print(f"⚠️ pyhailort direct access error: {e}")
+                
                 # Try alternative method
                 if not self.hailo_device:
                     print("🔍 Trying alternative device access...")
