@@ -93,12 +93,15 @@ class HailoYOLOProcessor:
                 if not self.hailo_device:
                     print("🔍 Trying alternative device access...")
                     try:
-                        # Try to create device directly
-                        if hasattr(hailo_platform, 'PcieDevice'):
+                        # Try to create device directly using VDevice
+                        if hasattr(hailo_platform, 'VDevice'):
+                            self.hailo_device = hailo_platform.VDevice()
+                            print(f"✅ Created VDevice: {self.hailo_device}")
+                        elif hasattr(hailo_platform, 'PcieDevice'):
                             self.hailo_device = hailo_platform.PcieDevice()
                             print(f"✅ Created PcieDevice: {self.hailo_device}")
                     except Exception as e:
-                        print(f"⚠️ PcieDevice creation error: {e}")
+                        print(f"⚠️ Device creation error: {e}")
                 
                 # Try to load YOLO model
                 if self.hailo_device:
