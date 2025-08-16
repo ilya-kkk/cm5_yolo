@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Main camera YOLO processing script for CM5 with Hailo-8L
-This script properly handles incomplete H.264 from libcamera-vid and runs real YOLO inference
+This script properly handles H.264 from libcamera-vid and runs real YOLO inference
 """
 
 import cv2
@@ -51,19 +51,6 @@ class HailoYOLOProcessor:
         
         # Initialize Hailo
         self.init_hailo()
-        
-        # Create SPS/PPS data for H.264
-        self.create_h264_headers()
-        
-    def create_h264_headers(self):
-        """Create SPS and PPS data for H.264 stream"""
-        # SPS for 640x480, 30fps, baseline profile
-        self.sps_data = b'\x00\x00\x00\x01\x67\x42\x00\x1E\x95\xA0\x28\x0F\x68\x40\x00\x00\x03\x00\x40\x00\x00\x0F\x03\xC6\x0C\x44\x80'
-        
-        # PPS for baseline profile
-        self.pps_data = b'\x00\x00\x00\x01\x68\xCE\x3C\x80'
-        
-        print("✅ Created H.264 SPS/PPS headers")
         
     def init_hailo(self):
         """Initialize Hailo-8L device and load YOLO model"""
@@ -136,91 +123,55 @@ class HailoYOLOProcessor:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def fix_h264_stream(self, h264_data):
-        """Fix incomplete H.264 stream by adding SPS/PPS headers"""
-        try:
-            # Find NAL unit start codes
-            start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
-            
-            # Check if data already has SPS/PPS
-            has_sps = b'\x00\x00\x00\x01\x67' in h264_data or b'\x00\x00\x01\x67' in h264_data
-            has_pps = b'\x00\x00\x00\x01\x68' in h264_data or b'\x00\x00\x01\x68' in h264_data
-            
-            if has_sps and has_pps:
-                print("✅ H.264 stream already has SPS/PPS")
-                return h264_data
-            
-            # Create fixed H.264 stream
-            fixed_stream = b''
-            
-            # Add SPS if missing
-            if not has_sps:
-                fixed_stream += self.sps_data
-                print("🔧 Added SPS to H.264 stream")
-            
-            # Add PPS if missing
-            if not has_pps:
-                fixed_stream += self.pps_data
-                print("🔧 Added PPS to H.264 stream")
-            
-            # Add original data
-            fixed_stream += h264_data
-            
-            print(f"🔧 Fixed H.264 stream: {len(fixed_stream)} bytes (was {len(h264_data)} bytes)")
-            return fixed_stream
-            
-        except Exception as e:
-            print(f"⚠️ Error fixing H.264 stream: {e}")
-            return h264_data
+    def try_multiple_decoding_methods(self, h264_data):
+        """Try multiple methods to decode H.264 stream"""
+        print(f"🔧 Trying multiple H.264 decoding methods for {len(h264_data)} bytes...")
+        
+        # Method 1: Try direct FFmpeg decode
+        frame = self.try_ffmpeg_direct_decode(h264_data)
+        if frame is not None:
+            return frame
+        
+        # Method 2: Try with different FFmpeg parameters
+        frame = self.try_ffmpeg_with_params(h264_data)
+        if frame is not None:
+            return frame
+        
+        # Method 3: Try to extract frame data manually
+        frame = self.try_manual_frame_extraction(h264_data)
+        if frame is not None:
+            return frame
+        
+        print("❌ All decoding methods failed")
+        return None
     
-    def decode_h264_with_ffmpeg(self, h264_data):
-        """Decode H.264 using FFmpeg with fixed stream"""
+    def try_ffmpeg_direct_decode(self, h264_data):
+        """Try direct FFmpeg decode without modifications"""
         try:
-            # Fix the H.264 stream
-            fixed_h264 = self.fix_h264_stream(h264_data)
-            
-            # Write fixed H.264 data to temporary file
             with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
-                temp_file.write(fixed_h264)
+                temp_file.write(h264_data)
                 temp_file_path = temp_file.name
             
-            # Use FFmpeg to decode H.264 to JPEG
             jpeg_output_path = temp_file_path + '.jpg'
             
-            # FFmpeg command with proper parameters
             cmd = [
-                'ffmpeg', '-y',  # Overwrite output files
-                '-f', 'h264',    # Input format
-                '-i', temp_file_path,  # Input file
-                '-vframes', '1',       # Extract only 1 frame
-                '-q:v', '2',           # High quality
-                '-pix_fmt', 'yuv420p', # Standard pixel format
-                jpeg_output_path        # Output file
+                'ffmpeg', '-y',
+                '-f', 'h264',
+                '-i', temp_file_path,
+                '-vframes', '1',
+                '-q:v', '2',
+                jpeg_output_path
             ]
             
-            # Run FFmpeg
             result = subprocess.run(cmd, capture_output=True, timeout=10)
             
             if result.returncode == 0 and os.path.exists(jpeg_output_path):
-                # Read the JPEG frame
                 frame = cv2.imread(jpeg_output_path)
-                
-                # Clean up temp files
-                try:
-                    os.unlink(temp_file_path)
-                    os.unlink(jpeg_output_path)
-                except:
-                    pass
-                
                 if frame is not None and frame.size > 0:
-                    print(f"✅ Successfully decoded H.264 frame: {frame.shape}")
+                    print("✅ Direct FFmpeg decode successful")
                     return frame
-                else:
-                    print("⚠️ Decoded frame is empty")
-            else:
-                print(f"❌ FFmpeg failed: {result.stderr.decode()}")
             
-            # Clean up temp files
+            # Cleanup
             try:
                 os.unlink(temp_file_path)
                 if os.path.exists(jpeg_output_path):
@@ -229,7 +180,115 @@ class HailoYOLOProcessor:
                 pass
                 
         except Exception as e:
-            print(f"⚠️ FFmpeg H.264 decode error: {e}")
+            print(f"⚠️ Direct FFmpeg decode failed: {e}")
+        
+        return None
+    
+    def try_ffmpeg_with_params(self, h264_data):
+        """Try FFmpeg with different parameters"""
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
+                temp_file.write(h264_data)
+                temp_file_path = temp_file.name
+            
+            jpeg_output_path = temp_file_path + '.jpg'
+            
+            # Try with different parameters
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'h264',
+                '-i', temp_file_path,
+                '-vframes', '1',
+                '-q:v', '2',
+                '-pix_fmt', 'yuv420p',
+                '-vf', 'scale=640:480',
+                jpeg_output_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            
+            if result.returncode == 0 and os.path.exists(jpeg_output_path):
+                frame = cv2.imread(jpeg_output_path)
+                if frame is not None and frame.size > 0:
+                    print("✅ FFmpeg with params decode successful")
+                    return frame
+            
+            # Cleanup
+            try:
+                os.unlink(temp_file_path)
+                if os.path.exists(jpeg_output_path):
+                    os.unlink(jpeg_output_path)
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"⚠️ FFmpeg with params decode failed: {e}")
+        
+        return None
+    
+    def try_manual_frame_extraction(self, h264_data):
+        """Try to manually extract frame data"""
+        try:
+            # Look for start codes
+            start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
+            
+            # Find first start code
+            first_start = -1
+            for start_code in start_codes:
+                pos = h264_data.find(start_code)
+                if pos != -1:
+                    first_start = pos
+                    break
+            
+            if first_start == -1:
+                print("⚠️ No start codes found in H.264 data")
+                return None
+            
+            # Extract data from first start code
+            frame_data = h264_data[first_start:]
+            
+            # Try to create a minimal valid H.264 stream
+            # Add a simple SPS header for 640x480
+            minimal_sps = b'\x00\x00\x00\x01\x67\x42\x00\x1E\x95\xA0\x28\x0F\x68\x40\x00\x00\x03\x00\x40\x00\x00\x0F\x03\xC6\x0C\x44\x80'
+            minimal_pps = b'\x00\x00\x00\x01\x68\xCE\x3C\x80'
+            
+            # Create minimal stream
+            minimal_stream = minimal_sps + minimal_pps + frame_data
+            
+            # Try to decode minimal stream
+            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
+                temp_file.write(minimal_stream)
+                temp_file_path = temp_file.name
+            
+            jpeg_output_path = temp_file_path + '.jpg'
+            
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'h264',
+                '-i', temp_file_path,
+                '-vframes', '1',
+                '-q:v', '2',
+                jpeg_output_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            
+            if result.returncode == 0 and os.path.exists(jpeg_output_path):
+                frame = cv2.imread(jpeg_output_path)
+                if frame is not None and frame.size > 0:
+                    print("✅ Manual frame extraction successful")
+                    return frame
+            
+            # Cleanup
+            try:
+                os.unlink(temp_file_path)
+                if os.path.exists(jpeg_output_path):
+                    os.unlink(jpeg_output_path)
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"⚠️ Manual frame extraction failed: {e}")
         
         return None
     
@@ -379,7 +438,7 @@ class HailoYOLOProcessor:
         """Process incoming H.264 stream and extract frames"""
         print("📹 Starting H.264 stream processing...")
         print("⏳ Waiting for libcamera-vid stream from host...")
-        print("🔧 Will fix incomplete H.264 stream by adding SPS/PPS headers")
+        print("🔧 Will try multiple decoding methods")
         
         while self.running:
             try:
@@ -395,8 +454,8 @@ class HailoYOLOProcessor:
                         print(f"📦 Received {len(data)} bytes, total buffer: {len(self.h264_buffer)} bytes")
                         print(f"🔧 Attempting to decode H.264 frame...")
                         
-                        # Try to decode with fixed H.264 stream
-                        frame = self.decode_h264_with_ffmpeg(self.h264_buffer)
+                        # Try multiple decoding methods
+                        frame = self.try_multiple_decoding_methods(self.h264_buffer)
                         
                         if frame is not None:
                             print(f"🎯 SUCCESS! Decoded real camera frame: {frame.shape}")
@@ -438,7 +497,7 @@ class HailoYOLOProcessor:
         print("🎯 Starting Hailo YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 Real YOLO processing with Hailo-8L")
-        print("🔧 Will fix incomplete H.264 stream from libcamera-vid")
+        print("🔧 Will try multiple H.264 decoding methods")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
