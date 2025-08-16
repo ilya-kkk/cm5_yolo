@@ -4,6 +4,7 @@ FROM ubuntu:22.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3.10/dist-packages
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
