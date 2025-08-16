@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
-    python3-opencv \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -41,6 +40,9 @@ WORKDIR /workspace
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Install OpenCV via pip to avoid conflicts with system packages
+RUN pip3 install --no-cache-dir opencv-python
 
 # Copy application code
 COPY . .
