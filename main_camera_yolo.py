@@ -92,7 +92,9 @@ class HailoYOLOProcessor:
                 "/opt/yolo/yolov3.cfg",
                 "/usr/share/yolo/yolov4.cfg",
                 "/usr/local/share/yolo/yolov4.cfg",
-                "/opt/yolo/yolov4.cfg"
+                "/opt/yolo/yolov4.cfg",
+                "/home/cm5/yolo_models/yolov3.cfg",  # Home directory
+                "/home/cm5/yolo_models/yolov4.cfg"   # Home directory
             ]
             
             possible_weights = [
@@ -101,7 +103,9 @@ class HailoYOLOProcessor:
                 "/opt/yolo/yolov3.weights",
                 "/usr/share/yolo/yolov4.weights",
                 "/usr/local/share/yolo/yolov4.weights",
-                "/opt/yolo/yolov4.weights"
+                "/opt/yolo/yolov4.weights",
+                "/home/cm5/yolo_models/yolov3.weights",  # Home directory
+                "/home/cm5/yolo_models/yolov4.weights"   # Home directory
             ]
             
             # Check for config and weights pairs
@@ -113,7 +117,7 @@ class HailoYOLOProcessor:
                         return config_path, weights_path
             
             # Try to find any .cfg and .weights files
-            result = subprocess.run(['find', '/usr', '-name', '*.cfg', '-type', 'f'], 
+            result = subprocess.run(['find', '/home/cm5', '-name', '*.cfg', '-type', 'f'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip():
                 cfg_files = result.stdout.strip().split('\n')
