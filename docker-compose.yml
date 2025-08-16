@@ -14,7 +14,7 @@ services:
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
-    command: ["python3", "/workspace/main_camera_yolo.py"]
+    command: ["python3", "/workspace/hailo_yolo.py"]
     privileged: true  # Required for camera access
 
   web-stream-service:
@@ -22,11 +22,12 @@ services:
     container_name: hailo_web_stream_service
     volumes:
       - .:/workspace
-      - /tmp:/tmp  # Access to temp files
+      - /tmp:/tmp  # Access to processed frames
     environment:
       - PYTHONPATH=/workspace
     working_dir: /workspace
-    network_mode: "host"  # Required to access UDP port 5000
+    ports:
+      - "8080:8080"
     restart: unless-stopped
     command: ["python3", "/workspace/web_stream_service_simple.py"]
     depends_on:
