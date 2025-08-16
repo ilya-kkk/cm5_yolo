@@ -1,6 +1,5 @@
-opencv-python>=4.8.0
-numpy>=1.24.0
-Pillow>=9.0.0
-Flask>=2.3.0
-# ultralytics>=8.0.0  # Commented out - too heavy for Docker build
-# hailo-platform>=4.0.0  # Commented out - not available for ARM64 
+opencv-python==4.8.1.78
+numpy==1.24.3
+flask==2.3.3
+pillow==10.0.1
+hailo-platform 
