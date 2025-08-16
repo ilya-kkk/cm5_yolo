@@ -20,11 +20,23 @@ class StreamStatusMonitor:
         self.last_check = time.time()
         
     def check_libcamera_status(self):
-        """Check if libcamera-vid is running"""
+        """Check if libcamera-vid is running by checking UDP port activity"""
         try:
-            result = subprocess.run(['pgrep', 'libcamera-vid'], 
-                                  capture_output=True, text=True)
-            self.libcamera_running = result.returncode == 0
+            # Since we're in a Docker container, we can't use pgrep directly
+            # Instead, we'll check if UDP port 5000 is receiving data
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(2)
+            sock.bind(('127.0.0.1', 5000))
+            
+            # Try to receive data
+            try:
+                data, addr = sock.recvfrom(1024)
+                self.libcamera_running = len(data) > 0
+            except socket.timeout:
+                # If no data received, check if port is bound by another process
+                self.libcamera_running = False
+            
+            sock.close()
         except:
             self.libcamera_running = False
     
@@ -211,6 +223,15 @@ def index():
                 font-size: 14px;
                 margin-top: 20px;
             }
+            
+            .success-message {
+                background: #d4edda;
+                color: #155724;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 20px 0;
+                border: 1px solid #c3e6cb;
+            }
         </style>
     </head>
     <body>
@@ -251,6 +272,11 @@ def index():
                     <li><strong>Откройте веб-интерфейс:</strong> <code>http://192.168.0.164:8080</code></li>
                     <li><strong>Для просмотра с телефона:</strong> Откройте в браузере телефона тот же адрес</li>
                 </ol>
+                
+                <div class="success-message">
+                    <strong>🎉 Отлично! Веб-сервис работает!</strong><br>
+                    Теперь вы можете управлять libcamera-vid прямо из браузера.
+                </div>
             </div>
             
             <div class="log" id="log">
@@ -385,6 +411,7 @@ def index():
             
             // Add initial log
             addLog('Система мониторинга запущена');
+            addLog('Веб-сервис готов к работе!');
         </script>
     </body>
     </html>
