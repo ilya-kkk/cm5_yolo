@@ -9,6 +9,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Optional
+import os
 
 import aiohttp
 from aiohttp import web
@@ -53,6 +54,7 @@ class SimpleMJPEGViewer:
         
         logger.info(f"MJPEG stream started for {request.remote}")
         
+        frame_count = 0
         try:
             while True:
                 # Get latest frame
@@ -72,18 +74,23 @@ class SimpleMJPEGViewer:
                     # Flush to ensure immediate transmission
                     await response.drain()
                     
+                    frame_count += 1
+                    if frame_count % 30 == 0:  # Log every 30 frames
+                        logger.info(f"Sent {frame_count} frames to {request.remote}")
+                    
                     # Control frame rate
                     await asyncio.sleep(0.033)  # ~30 FPS
                 else:
+                    logger.warning(f"No frame data available for {request.remote}")
                     # Send placeholder frame if no data available
                     await asyncio.sleep(0.1)
                     
         except asyncio.CancelledError:
             logger.info(f"MJPEG stream cancelled for {request.remote}")
         except Exception as e:
-            logger.error(f"MJPEG stream error: {e}")
+            logger.error(f"MJPEG stream error for {request.remote}: {e}")
         finally:
-            logger.info(f"MJPEG stream ended for {request.remote}")
+            logger.info(f"MJPEG stream ended for {request.remote}, sent {frame_count} frames")
             
         return response
         
@@ -105,8 +112,19 @@ class SimpleMJPEGViewer:
         try:
             frame_path = self.get_latest_frame_path()
             if frame_path and frame_path.exists():
-                with open(frame_path, 'rb') as f:
-                    return f.read()
+                # Check if file is readable and not empty
+                if os.access(frame_path, os.R_OK) and frame_path.stat().st_size > 0:
+                    with open(frame_path, 'rb') as f:
+                        frame_data = f.read()
+                        if len(frame_data) > 0:
+                            logger.info(f"Successfully read frame: {frame_path} ({len(frame_data)} bytes)")
+                            return frame_data
+                        else:
+                            logger.warning(f"Frame file is empty: {frame_path}")
+                else:
+                    logger.warning(f"Frame file not accessible: {frame_path}")
+            else:
+                logger.debug("No frame path available")
         except Exception as e:
             logger.error(f"Error reading frame: {e}")
         return None
@@ -118,7 +136,10 @@ class SimpleMJPEGViewer:
             if frame_files:
                 # Sort by modification time and get the latest
                 latest_frame = max(frame_files, key=lambda x: x.stat().st_mtime)
+                logger.debug(f"Found latest frame: {latest_frame} (size: {latest_frame.stat().st_size} bytes)")
                 return latest_frame
+            else:
+                logger.debug("No frame files found in /tmp")
         except Exception as e:
             logger.error(f"Error getting latest frame: {e}")
         return None
