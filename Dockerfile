@@ -1,21 +1,19 @@
-# Use Ubuntu 22.04 as base image
-FROM ubuntu:22.04
+# Use Python 3.10 full image with NumPy pre-installed
+FROM python:3.10
 
 # Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3.10/dist-packages
+ENV PYTHONPATH=/usr/local/lib/python3.10/site-packages
+ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
+ENV OPENCV_IO_ENABLE_JASPER=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
     libgtk-3-0 \
     libavcodec-dev \
@@ -27,7 +25,7 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libatlas-base-dev \
+    libopenblas-dev \
     gfortran \
     wget \
     curl \
@@ -40,9 +38,6 @@ WORKDIR /workspace
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Install NumPy and OpenCV via pip to avoid conflicts with system packages
-RUN pip3 install --no-cache-dir numpy opencv-python
 
 # Copy application code
 COPY . .
