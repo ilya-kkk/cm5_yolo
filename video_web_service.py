@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VideoWebService:
-    def __init__(self, port: int = 8084):
+    def __init__(self, port: int = 8085):
         self.port = port
         self.app = web.Application()
         self.setup_routes()

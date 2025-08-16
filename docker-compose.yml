@@ -42,7 +42,7 @@ services:
       - PYTHONPATH=/workspace
     working_dir: /workspace
     ports:
-      - "8084:8084"
+      - "8085:8085"
     depends_on:
       - yolo-camera-stream
     networks:
