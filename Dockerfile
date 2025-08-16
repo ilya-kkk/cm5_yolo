@@ -1,21 +1,20 @@
-# Use Ubuntu as base image
+# Use Ubuntu 22.04 as base image
 FROM ubuntu:22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV HAILO_ARCH=hailo8l
-ENV WORKSPACE=/workspace
-ENV DISPLAY=:0
 
-# Create workspace directory
-WORKDIR ${WORKSPACE}
-
-# Add Raspberry Pi repository
-RUN echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspberrypi.list
+# Set working directory
+WORKDIR /workspace
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    && wget -qO - https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | apt-key add - \
+    && echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspberrypi.list \
+    && apt-get update && apt-get install -y \
     python3 \
     python3-opencv \
     python3-pip \
@@ -40,7 +39,6 @@ RUN apt-get update && apt-get install -y \
     libgstreamer-plugins-good1.0-dev \
     v4l-utils \
     curl \
-    wget \
     ffmpeg \
     netcat \
     && rm -rf /var/lib/apt/lists/*
