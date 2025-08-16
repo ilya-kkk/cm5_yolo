@@ -9,12 +9,13 @@ services:
       - /dev:/dev  # Access to camera devices
       - /tmp:/tmp  # Access to temp files for frame sharing
       - /home/cm5/yolo_models:/home/cm5/yolo_models  # Access to YOLO models
+      - /usr/lib/python3/dist-packages:/usr/lib/python3/dist-packages  # Access to system Hailo packages
     environment:
-      - PYTHONPATH=/workspace
+      - PYTHONPATH=/workspace:/usr/lib/python3/dist-packages
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
-    command: ["python3", "/workspace/hailo_yolo.py"]
+    command: ["python3", "/workspace/hailo_yolo_direct.py"]
     privileged: true  # Required for camera access
 
   web-stream-service:
