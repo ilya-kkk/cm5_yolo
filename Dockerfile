@@ -51,5 +51,5 @@ RUN chmod +x *.py
 # Expose ports
 EXPOSE 8080
 
-# Default command
-CMD ["python3", "hailo_yolo.py"] 
+# Default command - will be overridden by docker-compose
+CMD ["python3", "hailo_yolo_direct.py"] 
