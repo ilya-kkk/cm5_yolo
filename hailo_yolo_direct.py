@@ -6,12 +6,8 @@ Direct Hailo YOLO processing using working Python API
 import sys
 import os
 
-# Add system Python path for Hailo BEFORE any other imports
+# Add system Python path for OpenCV
 sys.path.insert(0, '/usr/lib/python3/dist-packages')
-sys.path.insert(0, '/usr/local/lib/python3.10/dist-packages')
-
-# Force reload of sys.path
-sys.path = list(set(sys.path))
 
 print("Python path after modification:", sys.path)
 
