@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Main camera YOLO processing script for CM5 with Hailo-8L
-This script starts libcamera-vid on the host and processes the UDP stream
+This script listens for UDP stream from libcamera-vid running on the host
 """
 
 import cv2
 import numpy as np
 import time
-import subprocess
 import signal
 import sys
 import socket
@@ -16,63 +15,20 @@ from pathlib import Path
 
 class CameraYOLOProcessor:
     def __init__(self):
-        self.camera_index = 0
-        self.camera = None
-        self.libcamera_process = None
         self.udp_socket = None
         self.running = False
         self.frame_buffer = []
         self.buffer_size = 1024 * 1024  # 1MB buffer
         
-    def start_libcamera_stream(self):
-        """Start libcamera-vid streaming to UDP port 5000"""
-        try:
-            print("🚀 Starting libcamera-vid stream...")
-            
-            # Kill any existing libcamera-vid processes
-            subprocess.run(['pkill', 'libcamera-vid'], capture_output=True)
-            time.sleep(1)
-            
-            # Start libcamera-vid streaming to UDP
-            cmd = [
-                'libcamera-vid',
-                '-t', '0',  # Run indefinitely
-                '--codec', 'h264',
-                '--width', '640',
-                '--height', '480',
-                '--framerate', '30',
-                '--inline',
-                '-o', 'udp://127.0.0.1:5000'
-            ]
-            
-            # Start in background
-            self.libcamera_process = subprocess.Popen(
-                cmd, 
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL
-            )
-            
-            # Wait a bit to see if it starts successfully
-            time.sleep(3)
-            
-            if self.libcamera_process.poll() is None:
-                print("✅ libcamera-vid started successfully")
-                return True
-            else:
-                print("❌ libcamera-vid failed to start")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Error starting libcamera-vid: {e}")
-            return False
-    
     def setup_udp_receiver(self):
-        """Setup UDP socket to receive H.264 stream"""
+        """Setup UDP socket to receive H.264 stream from host"""
         try:
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.udp_socket.bind(('127.0.0.1', 5000))
             self.udp_socket.settimeout(1.0)
             print("✅ UDP receiver setup on port 5000")
+            print("📝 Note: libcamera-vid must be started manually on the host")
+            print("📝 Command: libcamera-vid -t 0 --codec h264 --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
             return True
         except Exception as e:
             print(f"❌ Error setting up UDP receiver: {e}")
@@ -81,6 +37,7 @@ class CameraYOLOProcessor:
     def process_h264_stream(self):
         """Process incoming H.264 stream and extract frames"""
         print("📹 Starting H.264 stream processing...")
+        print("⏳ Waiting for libcamera-vid stream from host...")
         
         while self.running:
             try:
@@ -90,7 +47,7 @@ class CameraYOLOProcessor:
                 if data:
                     # For now, just log that we're receiving data
                     # In a full implementation, you would decode H.264 and run YOLO
-                    print(f"📦 Received {len(data)} bytes of H.264 data")
+                    print(f"📦 Received {len(data)} bytes of H.264 data from {addr}")
                     
                     # Simulate YOLO processing
                     time.sleep(0.1)  # Simulate processing time
@@ -107,11 +64,7 @@ class CameraYOLOProcessor:
     def run(self):
         """Main run loop"""
         print("🎯 Starting Camera YOLO Processor...")
-        
-        # Start libcamera-vid on host
-        if not self.start_libcamera_stream():
-            print("❌ Failed to start libcamera-vid")
-            return
+        print("📋 This service listens for UDP stream from libcamera-vid on the host")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
@@ -128,6 +81,9 @@ class CameraYOLOProcessor:
         print("✅ Camera YOLO Processor is running")
         print("📱 Video stream available at UDP://127.0.0.1:5000")
         print("🌐 Web interface available at http://localhost:8080")
+        print("")
+        print("🔧 To start video stream, run on the host:")
+        print("   libcamera-vid -t 0 --codec h264 --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
         
         try:
             # Keep main thread alive
@@ -145,11 +101,6 @@ class CameraYOLOProcessor:
         
         if self.udp_socket:
             self.udp_socket.close()
-        
-        if self.libcamera_process:
-            self.libcamera_process.terminate()
-            self.libcamera_process.wait()
-            print("✅ libcamera-vid stopped")
         
         print("✅ Cleanup complete")
 
