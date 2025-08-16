@@ -85,6 +85,8 @@ class HailoYOLOProcessor:
     def find_yolo_model(self):
         """Find available YOLO model files"""
         try:
+            print("🔍 Searching for YOLO model files...")
+            
             # Look for common YOLO model locations
             possible_configs = [
                 "/usr/share/yolo/yolov3.cfg",
@@ -108,25 +110,48 @@ class HailoYOLOProcessor:
                 "/home/cm5/yolo_models/yolov4.weights"   # Home directory
             ]
             
+            print("📁 Checking possible config paths:")
+            for config_path in possible_configs:
+                exists = os.path.exists(config_path)
+                print(f"  {config_path}: {'✅' if exists else '❌'}")
+            
+            print("📁 Checking possible weights paths:")
+            for weights_path in possible_weights:
+                exists = os.path.exists(weights_path)
+                print(f"  {weights_path}: {'✅' if exists else '❌'}")
+            
             # Check for config and weights pairs
             for config_path in possible_configs:
                 if os.path.exists(config_path):
+                    print(f"🎯 Found config file: {config_path}")
                     # Find corresponding weights
                     weights_path = config_path.replace('.cfg', '.weights')
                     if os.path.exists(weights_path):
+                        print(f"✅ Found matching weights file: {weights_path}")
                         return config_path, weights_path
+                    else:
+                        print(f"❌ No matching weights file for: {config_path}")
             
             # Try to find any .cfg and .weights files
+            print("🔍 Searching for .cfg files in /home/cm5...")
             result = subprocess.run(['find', '/home/cm5', '-name', '*.cfg', '-type', 'f'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip():
                 cfg_files = result.stdout.strip().split('\n')
+                print(f"📋 Found {len(cfg_files)} .cfg files:")
                 for cfg_file in cfg_files:
+                    print(f"  {cfg_file}")
                     if 'yolo' in cfg_file.lower():
                         weights_file = cfg_file.replace('.cfg', '.weights')
                         if os.path.exists(weights_file):
+                            print(f"✅ Found matching weights file: {weights_file}")
                             return cfg_file, weights_file
+                        else:
+                            print(f"❌ No matching weights file for: {cfg_file}")
+            else:
+                print(f"⚠️ Find command failed: {result.stderr}")
             
+            print("❌ No YOLO model found")
             return None, None
             
         except Exception as e:
