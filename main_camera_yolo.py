@@ -82,54 +82,65 @@ class YOLOCameraStream:
         np.random.seed(42)
         self.colors = np.random.randint(0, 255, size=(len(self.classes), 3), dtype=np.uint8)
     
-    def start_camera(self):
-        """Start camera capture from UDP stream"""
+    def start_libcamera_stream(self):
+        """Start libcamera-vid streaming process"""
         try:
-            print("Starting camera from UDP stream...")
+            # libcamera-vid command with the specified pipeline
+            libcamera_cmd = [
+                'libcamera-vid',
+                '-t', '0',  # Continuous recording
+                '--codec', 'h264',
+                '--width', str(self.width),
+                '--height', str(self.height),
+                '--framerate', str(self.fps),
+                '--inline',
+                '-o', 'udp://127.0.0.1:5000'  # Changed to localhost for testing
+            ]
             
-            # Wait a bit for stream to stabilize
-            time.sleep(2)
+            print(f"Starting libcamera-vid: {' '.join(libcamera_cmd)}")
             
-            # Try to connect to UDP stream from external libcamera-vid process
-            udp_url = "udp://127.0.0.1:5000"
+            # Start libcamera-vid process
+            self.libcamera_process = subprocess.Popen(
+                libcamera_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0
+            )
             
-            # Use GStreamer to read from UDP stream
-            gst_str = f"udpsrc port=5000 ! jpegdec ! videoconvert ! appsink"
+            print("libcamera-vid streaming started")
+            return True
             
-            print(f"Trying GStreamer UDP stream: {gst_str}")
+        except Exception as e:
+            print(f"Error starting libcamera-vid: {e}")
+            return False
+
+    def start_camera(self):
+        """Start camera capture directly from camera device"""
+        try:
+            print("Starting camera directly from camera device...")
             
-            self.camera = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+            # Try to open camera directly
+            self.camera = cv2.VideoCapture(self.camera_index)
             
             if self.camera.isOpened():
-                # Wait a bit for stream to start
+                # Set camera properties
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+                self.camera.set(cv2.CAP_PROP_FPS, self.fps)
+                
+                # Wait a bit for camera to initialize
                 time.sleep(2)
                 
                 # Try to read a test frame
                 ret, test_frame = self.camera.read()
                 if ret and test_frame is not None:
-                    print(f"UDP stream camera started successfully: frame shape: {test_frame.shape}")
+                    print(f"Camera started successfully: frame shape: {test_frame.shape}")
                     return True
                 else:
-                    print("UDP stream camera opened but failed to read frame")
+                    print("Camera opened but failed to read frame")
                     self.camera.release()
             else:
-                print("Failed to open UDP stream camera")
-            
-            # Fallback: try direct UDP with OpenCV
-            print("Trying direct UDP with OpenCV...")
-            self.camera = cv2.VideoCapture(udp_url)
-            
-            if self.camera.isOpened():
-                time.sleep(2)
-                ret, test_frame = self.camera.read()
-                if ret and test_frame is not None:
-                    print(f"Direct UDP camera started successfully: frame shape: {test_frame.shape}")
-                    return True
-                else:
-                    print("Direct UDP camera opened but failed to read frame")
-                    self.camera.release()
-            else:
-                print("Failed to open direct UDP camera")
+                print("Failed to open camera device")
             
             print("All camera access methods failed")
             return False
@@ -413,7 +424,9 @@ class YOLOCameraStream:
     
     def start(self):
         """Start the camera stream processing"""
+        # Start the camera capture directly
         if not self.start_camera():
+            print("Failed to start camera capture")
             return False
         
         self.running = True
