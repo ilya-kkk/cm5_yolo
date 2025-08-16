@@ -10,27 +10,35 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
-    curl \
-    wget \
+    python3-opencv \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    ffmpeg \
-    gstreamer1.0-tools \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav \
-    gstreamer1.0-x \
-    gstreamer1.0-alsa \
-    gstreamer1.0-gl \
-    gstreamer1.0-gtk3 \
-    gstreamer1.0-qt5 \
-    gstreamer1.0-pulseaudio \
+    libgthread-2.0-0 \
+    libgtk-3-0 \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libatlas-base-dev \
+    gfortran \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install HailoRT and Python packages
+RUN apt-get update && apt-get install -y \
+    hailort \
+    python3-hailort \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -40,12 +48,14 @@ WORKDIR /workspace
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy source code
+# Copy application code
 COPY . .
 
-# Set environment variables
-ENV PYTHONPATH=/workspace
-ENV GST_DEBUG=0
+# Make scripts executable
+RUN chmod +x *.py
+
+# Expose ports
+EXPOSE 8080
 
 # Default command
-CMD ["python3", "/workspace/main_camera_yolo.py"] 
+CMD ["python3", "hailo_yolo.py"] 
