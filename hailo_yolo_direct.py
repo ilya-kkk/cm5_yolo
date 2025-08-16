@@ -8,8 +8,21 @@ import os
 
 # Add system Python path for Hailo BEFORE any other imports
 sys.path.insert(0, '/usr/lib/python3/dist-packages')
+sys.path.insert(0, '/usr/local/lib/python3.10/dist-packages')
 
-import cv2
+# Force reload of sys.path
+sys.path = list(set(sys.path))
+
+print("Python path after modification:", sys.path)
+
+try:
+    import cv2
+    print("✅ OpenCV imported successfully")
+    print("OpenCV version:", cv2.__version__)
+except ImportError as e:
+    print(f"❌ Failed to import OpenCV: {e}")
+    sys.exit(1)
+
 import numpy as np
 import time
 import signal
