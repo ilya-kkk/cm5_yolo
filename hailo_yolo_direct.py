@@ -20,15 +20,9 @@ import subprocess
 import json
 from pathlib import Path
 
-# Hailo imports
-try:
-    import hailo_platform
-    from hailo_platform import Device, HEF, InputVStreams, OutputVStreams
-    HAILO_AVAILABLE = True
-    print("✅ Hailo platform imported successfully")
-except ImportError as e:
-    HAILO_AVAILABLE = False
-    print(f"⚠️ Hailo platform not available: {e}")
+# Hailo imports - temporarily disabled for testing
+HAILO_AVAILABLE = False
+print("⚠️ Hailo platform temporarily disabled for testing")
 
 class HailoYOLOProcessor:
     def __init__(self):
@@ -68,7 +62,7 @@ class HailoYOLOProcessor:
             print("🔧 Initializing Hailo YOLO...")
             
             if not HAILO_AVAILABLE:
-                print("⚠️ Hailo platform not available")
+                print("⚠️ Hailo platform not available - running in test mode")
                 return
             
             # Try to get Hailo device directly using Python API
