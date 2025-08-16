@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Optional
 import threading
+import base64
 
 import aiohttp
 from aiohttp import web
@@ -26,12 +27,20 @@ class VideoWebService:
         self.setup_routes()
         self.last_frame_time = 0
         self.frame_cache = {}
+        self.test_frame_counter = 0
         
     def setup_routes(self):
         """Setup web routes"""
         self.app.router.add_get('/', self.index_handler)
         self.app.router.add_get('/video_feed', self.video_feed_handler)
         self.app.router.add_get('/status', self.status_handler)
+        
+    def create_test_frame(self):
+        """Create a simple test frame as base64 encoded data"""
+        # Create a simple colored test frame (640x480)
+        # This is a minimal JPEG-like data for testing
+        test_frame_data = b'/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A'
+        return test_frame_data
         
     async def index_handler(self, request):
         """Serve the main HTML page"""
@@ -118,6 +127,14 @@ class VideoWebService:
             margin: 20px 0;
             border-left: 4px solid #dc3545;
         }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
     </style>
 </head>
 <body>
@@ -127,7 +144,8 @@ class VideoWebService:
         <div class="info">
             <strong>📡 Статус:</strong> <span id="status">Запуск стрима...</span><br>
             <strong>📊 FPS:</strong> <span id="fps">-</span><br>
-            <strong>🖼️ Кадров доступно:</strong> <span id="frameCount">-</span>
+            <strong>🖼️ Кадров доступно:</strong> <span id="frameCount">-</span><br>
+            <strong>🔧 Режим:</strong> <span id="mode">-</span>
         </div>
         
         <div class="video-container">
@@ -145,6 +163,11 @@ class VideoWebService:
             • Камера CSI подключена через MIPI интерфейс<br>
             • Обработанные кадры сохраняются в /tmp/processed_frame_*.jpg<br>
             • Веб-интерфейс обновляется автоматически
+        </div>
+        
+        <div class="warning" id="warningBox" style="display: none;">
+            <strong>⚠️ Внимание:</strong><br>
+            <span id="warningText">Показываются тестовые кадры</span>
         </div>
     </div>
 
@@ -166,6 +189,15 @@ class VideoWebService:
                 .then(data => {
                     document.getElementById('frameCount').textContent = data.frames_available;
                     document.getElementById('status').textContent = '✅ Статус обновлен';
+                    document.getElementById('mode').textContent = data.mode;
+                    
+                    // Show warning if using test frames
+                    if (data.mode === 'test') {
+                        document.getElementById('warningBox').style.display = 'block';
+                        document.getElementById('warningText').textContent = 'Используются тестовые кадры. Проверьте подключение камеры.';
+                    } else {
+                        document.getElementById('warningBox').style.display = 'none';
+                    }
                 })
                 .catch(error => {
                     document.getElementById('status').textContent = '❌ Ошибка получения статуса';
@@ -211,80 +243,114 @@ class VideoWebService:
         
     async def video_feed_handler(self, request):
         """Stream video frames as MJPEG"""
-        response = web.StreamResponse(
-            status=200,
-            headers={
-                'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        )
-        
-        await response.prepare(request)
-        
         try:
+            response = web.StreamResponse(
+                status=200,
+                headers={
+                    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            )
+            
+            await response.prepare(request)
+            
             while True:
-                frame_path = self.get_latest_valid_frame_path()
-                if frame_path and frame_path.exists():
-                    try:
-                        # Check if file is valid JPEG (size > 1KB)
-                        file_size = frame_path.stat().st_size
-                        if file_size < 1024:
-                            logger.warning(f"Frame {frame_path} too small ({file_size} bytes), skipping")
-                            await asyncio.sleep(0.1)
-                            continue
-                        
-                        with open(frame_path, 'rb') as f:
-                            frame_data = f.read()
-                        
-                        # Verify frame data is not empty
-                        if len(frame_data) == 0:
-                            logger.warning(f"Frame {frame_path} is empty, skipping")
-                            await asyncio.sleep(0.1)
-                            continue
-                        
-                        # Send frame as MJPEG
+                try:
+                    frame_path = self.get_latest_valid_frame_path()
+                    if frame_path and frame_path.exists():
+                        try:
+                            # Check if file is valid JPEG (size > 1KB)
+                            file_size = frame_path.stat().st_size
+                            if file_size < 1024:
+                                logger.warning(f"Frame {frame_path} too small ({file_size} bytes), using test frame")
+                                frame_data = self.create_test_frame()
+                            else:
+                                with open(frame_path, 'rb') as f:
+                                    frame_data = f.read()
+                            
+                            # Verify frame data is not empty
+                            if len(frame_data) == 0:
+                                logger.warning(f"Frame {frame_path} is empty, using test frame")
+                                frame_data = self.create_test_frame()
+                            
+                            # Send frame as MJPEG
+                            frame_header = f'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame_data)}\r\n\r\n'
+                            await response.write(frame_header.encode())
+                            await response.write(frame_data)
+                            await response.write(b'\r\n')
+                            
+                            # Update last frame time
+                            self.last_frame_time = time.time()
+                            
+                            # Adaptive frame rate based on available frames
+                            await asyncio.sleep(0.1)  # 10 FPS for smooth streaming
+                            
+                        except Exception as e:
+                            logger.error(f"Error reading frame {frame_path}: {e}")
+                            # Send test frame as fallback
+                            frame_data = self.create_test_frame()
+                            frame_header = f'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame_data)}\r\n\r\n'
+                            await response.write(frame_header.encode())
+                            await response.write(frame_data)
+                            await response.write(b'\r\n')
+                            await asyncio.sleep(0.5)
+                    else:
+                        # No valid frame available, send test frame
+                        logger.info("No valid frames available, sending test frame")
+                        frame_data = self.create_test_frame()
                         frame_header = f'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame_data)}\r\n\r\n'
                         await response.write(frame_header.encode())
                         await response.write(frame_data)
                         await response.write(b'\r\n')
+                        await asyncio.sleep(1)
                         
-                        # Update last frame time
-                        self.last_frame_time = time.time()
-                        
-                        # Adaptive frame rate based on available frames
-                        await asyncio.sleep(0.1)  # 10 FPS for smooth streaming
-                        
-                    except Exception as e:
-                        logger.error(f"Error reading frame {frame_path}: {e}")
-                        await asyncio.sleep(0.5)
-                else:
-                    # No valid frame available, send placeholder
-                    logger.info("No valid frames available, sending placeholder")
-                    placeholder = b'--frame\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nNo Frame\r\n'
-                    await response.write(placeholder)
+                except asyncio.CancelledError:
+                    logger.info("Video stream cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in video stream loop: {e}")
+                    # Send test frame as fallback
+                    try:
+                        frame_data = self.create_test_frame()
+                        frame_header = f'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame_data)}\r\n\r\n'
+                        await response.write(frame_header.encode())
+                        await response.write(frame_data)
+                        await response.write(b'\r\n')
+                    except:
+                        pass
                     await asyncio.sleep(1)
                     
-        except asyncio.CancelledError:
-            logger.info("Video stream cancelled")
         except Exception as e:
-            logger.error(f"Video stream error: {e}")
+            logger.error(f"Error setting up video stream: {e}")
+            # Return error response
+            return web.Response(
+                text="Error setting up video stream",
+                status=500,
+                content_type='text/plain'
+            )
         finally:
             try:
                 await response.write_eof()
             except:
                 pass
-            
+        
+        return response
+        
     async def status_handler(self, request):
         """Return current status"""
+        valid_frames = self.count_valid_frames()
+        mode = 'real' if valid_frames > 0 else 'test'
+        
         status = {
             'status': 'Running',
             'timestamp': time.time(),
             'latest_frame': self.get_latest_frame_number(),
-            'frames_available': self.count_valid_frames(),
+            'frames_available': valid_frames,
             'last_frame_time': self.last_frame_time,
-            'uptime': time.time() - self.last_frame_time if self.last_frame_time > 0 else 0
+            'uptime': time.time() - self.last_frame_time if self.last_frame_time > 0 else 0,
+            'mode': mode
         }
         return web.json_response(status)
         
