@@ -36,74 +36,119 @@ class HailoYOLOProcessor:
         # MJPEG parsing variables
         self.frame_count = 0
         
-        # Hailo integration
-        self.hailo_device = None
-        self.yolo_model = None
+        # YOLO model variables
+        self.yolo_net = None
+        self.output_layers = None
+        self.classes = None
         self.model_loaded = False
         
         # Create output directory for processed frames
         self.output_dir = Path("/tmp/yolo_frames")
         self.output_dir.mkdir(exist_ok=True)
         
-        # Initialize Hailo
-        self.init_hailo()
+        # Initialize YOLO
+        self.init_yolo()
         
-    def init_hailo(self):
-        """Initialize Hailo-8L device and load YOLO model"""
+    def init_yolo(self):
+        """Initialize YOLO model for real inference"""
         try:
-            print("🔧 Initializing Hailo-8L...")
+            print("🔧 Initializing YOLO model...")
             
-            # Check if Hailo device is available
-            result = subprocess.run(['hailo', 'scan'], capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                print("✅ Hailo device found")
-                print(result.stdout)
-            else:
-                print("⚠️ Hailo scan failed, but continuing...")
-            
-            # Try to find YOLO model
-            yolo_model_path = self.find_yolo_model()
-            if yolo_model_path:
-                print(f"🎯 Found YOLO model: {yolo_model_path}")
-                self.yolo_model = yolo_model_path
+            # Try to load YOLO model from common locations
+            yolo_config, weights_path = self.find_yolo_model()
+            if yolo_config:
+                print(f"🎯 Found YOLO model: {weights_path}")
+                
+                # Load YOLO model
+                self.yolo_net = cv2.dnn.readNet(weights_path, yolo_config)
+                
+                # Set backend and target
+                self.yolo_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+                self.yolo_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+                
+                # Get output layer names
+                layer_names = self.yolo_net.getLayerNames()
+                self.output_layers = [layer_names[i - 1] for i in self.yolo_net.getUnconnectedOutLayers()]
+                
+                # Load COCO class names
+                self.classes = self.load_coco_classes()
+                
                 self.model_loaded = True
+                print("✅ YOLO model loaded successfully")
             else:
                 print("⚠️ No YOLO model found, will use simulation")
                 
         except Exception as e:
-            print(f"⚠️ Hailo initialization error: {e}")
+            print(f"⚠️ YOLO initialization error: {e}")
             print("🔄 Continuing with simulated YOLO...")
     
     def find_yolo_model(self):
-        """Find available YOLO model for Hailo"""
+        """Find available YOLO model files"""
         try:
             # Look for common YOLO model locations
-            possible_paths = [
-                "/usr/share/hailo/models/yolov8.hef",
-                "/usr/local/share/hailo/models/yolov8.hef",
-                "/opt/hailo/models/yolov8.hef",
-                "/usr/share/hailo/models/yolov5.hef",
-                "/usr/local/share/hailo/models/yolov5.hef"
+            possible_configs = [
+                "/usr/share/yolo/yolov3.cfg",
+                "/usr/local/share/yolo/yolov3.cfg",
+                "/opt/yolo/yolov3.cfg",
+                "/usr/share/yolo/yolov4.cfg",
+                "/usr/local/share/yolo/yolov4.cfg",
+                "/opt/yolo/yolov4.cfg"
             ]
             
-            for path in possible_paths:
-                if os.path.exists(path):
-                    return path
+            possible_weights = [
+                "/usr/share/yolo/yolov3.weights",
+                "/usr/local/share/yolo/yolov3.weights",
+                "/opt/yolo/yolov3.weights",
+                "/usr/share/yolo/yolov4.weights",
+                "/usr/local/share/yolo/yolov4.weights",
+                "/opt/yolo/yolov4.weights"
+            ]
             
-            # Try to find any .hef file
-            result = subprocess.run(['find', '/usr', '-name', '*.hef', '-type', 'f'], 
+            # Check for config and weights pairs
+            for config_path in possible_configs:
+                if os.path.exists(config_path):
+                    # Find corresponding weights
+                    weights_path = config_path.replace('.cfg', '.weights')
+                    if os.path.exists(weights_path):
+                        return config_path, weights_path
+            
+            # Try to find any .cfg and .weights files
+            result = subprocess.run(['find', '/usr', '-name', '*.cfg', '-type', 'f'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip():
-                hef_files = result.stdout.strip().split('\n')
-                for hef_file in hef_files:
-                    if 'yolo' in hef_file.lower():
-                        return hef_file
+                cfg_files = result.stdout.strip().split('\n')
+                for cfg_file in cfg_files:
+                    if 'yolo' in cfg_file.lower():
+                        weights_file = cfg_file.replace('.cfg', '.weights')
+                        if os.path.exists(weights_file):
+                            return cfg_file, weights_file
             
-            return None
+            return None, None
             
         except Exception as e:
             print(f"⚠️ Error finding YOLO model: {e}")
-            return None
+            return None, None
+    
+    def load_coco_classes(self):
+        """Load COCO class names"""
+        try:
+            # COCO class names
+            classes = [
+                'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
+                'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
+                'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
+                'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+                'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+                'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
+                'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
+                'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+                'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+                'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+            ]
+            return classes
+        except Exception as e:
+            print(f"⚠️ Error loading COCO classes: {e}")
+            return []
     
     def setup_udp_receiver(self):
         """Setup UDP socket to receive MJPEG stream from host"""
@@ -160,65 +205,112 @@ class HailoYOLOProcessor:
             return None
     
     def run_yolo_inference(self, frame):
-        """Run YOLO inference using Hailo-8L"""
+        """Run YOLO inference using loaded model"""
         try:
-            if not self.model_loaded or not self.yolo_model:
+            if not self.model_loaded or self.yolo_net is None:
                 print("⚠️ No YOLO model loaded, using simulation")
                 return self.simulate_yolo_detection(frame)
             
-            # Prepare frame for Hailo
-            # Resize to model input size (typically 640x640)
-            input_size = (640, 640)
-            resized_frame = cv2.resize(frame, input_size)
+            # Prepare frame for YOLO
+            height, width = frame.shape[:2]
             
-            # Convert to RGB and normalize
-            rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
-            normalized_frame = rgb_frame.astype(np.float32) / 255.0
+            # Create blob from image
+            blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
             
-            # Save frame for Hailo processing
-            temp_frame_path = "/tmp/hailo_input.jpg"
-            cv2.imwrite(temp_frame_path, resized_frame)
+            # Set input blob
+            self.yolo_net.setInput(blob)
             
-            # Run Hailo inference
-            cmd = [
-                'hailo', 'run', self.yolo_model,
-                '--input', temp_frame_path,
-                '--output', '/tmp/hailo_output.json'
-            ]
+            # Run inference
+            outputs = self.yolo_net.forward(self.output_layers)
             
-            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            # Process detections
+            detections = self.process_yolo_outputs(outputs, width, height)
             
-            if result.returncode == 0:
-                # Read Hailo output
-                try:
-                    with open('/tmp/hailo_output.json', 'r') as f:
-                        detections = json.load(f)
-                    
-                    # Process detections
-                    processed_frame = self.draw_hailo_detections(frame, detections)
-                    
-                    # Clean up
-                    try:
-                        os.unlink(temp_frame_path)
-                        os.unlink('/tmp/hailo_output.json')
-                    except:
-                        pass
-                    
-                    return processed_frame
-                    
-                except Exception as e:
-                    print(f"⚠️ Error reading Hailo output: {e}")
+            # Draw detections on frame
+            processed_frame = self.draw_yolo_detections(frame, detections)
             
-            # If Hailo failed, fall back to simulation
-            print("⚠️ Hailo inference failed, using simulation")
-            return self.simulate_yolo_detection(frame)
+            return processed_frame
             
         except Exception as e:
             print(f"⚠️ YOLO inference error: {e}")
             return self.simulate_yolo_detection(frame)
     
+    def process_yolo_outputs(self, outputs, width, height):
+        """Process YOLO network outputs"""
+        detections = []
+        
+        try:
+            for output in outputs:
+                for detection in output:
+                    scores = detection[5:]
+                    class_id = np.argmax(scores)
+                    confidence = scores[class_id]
+                    
+                    if confidence > 0.5:  # Confidence threshold
+                        center_x = int(detection[0] * width)
+                        center_y = int(detection[1] * height)
+                        w = int(detection[2] * width)
+                        h = int(detection[3] * height)
+                        
+                        # Calculate bounding box coordinates
+                        x = int(center_x - w / 2)
+                        y = int(center_y - h / 2)
+                        
+                        detections.append({
+                            'bbox': [x, y, x + w, y + h],
+                            'class': self.classes[class_id] if class_id < len(self.classes) else f'Class {class_id}',
+                            'confidence': float(confidence)
+                        })
+            
+            return detections
+            
+        except Exception as e:
+            print(f"⚠️ Error processing YOLO outputs: {e}")
+            return []
+    
+    def draw_yolo_detections(self, frame, detections):
+        """Draw YOLO detections on frame"""
+        processed_frame = frame.copy()
+        
+        # Add timestamp and FPS
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        cv2.putText(processed_frame, f"Time: {timestamp}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(processed_frame, f"FPS: {self.current_fps:.1f}", (10, 60), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        
+        # Add status
+        cv2.putText(processed_frame, "YOLO Processing Active (Real Inference)", (10, 90), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+        
+        # Add frame counter
+        cv2.putText(processed_frame, f"Frame: {self.frame_count}", (10, 120), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        
+        # Add detection count
+        cv2.putText(processed_frame, f"Detections: {len(detections)}", (10, 150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        
+        # Draw detections
+        for detection in detections:
+            bbox = detection['bbox']
+            class_name = detection['class']
+            confidence = detection['confidence']
+            
+            x1, y1, x2, y2 = bbox
+            
+            # Draw bounding box
+            cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            
+            # Draw label
+            label = f"{class_name}: {confidence:.2f}"
+            cv2.putText(processed_frame, label, (x1, y1-10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        
+        return processed_frame
+    
     def simulate_yolo_detection(self, frame):
-        """Simulate YOLO detection when Hailo is not available"""
+        """Simulate YOLO detection when model is not available"""
         processed_frame = frame.copy()
         
         # Add timestamp and FPS
@@ -239,44 +331,6 @@ class HailoYOLOProcessor:
         # Add camera info
         cv2.putText(processed_frame, "Real Camera Stream Active", (10, 150), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        
-        return processed_frame
-    
-    def draw_hailo_detections(self, frame, detections):
-        """Draw Hailo YOLO detections on frame"""
-        processed_frame = frame.copy()
-        
-        # Add timestamp and FPS
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(processed_frame, f"Time: {timestamp}", (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(processed_frame, f"FPS: {self.current_fps:.1f}", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        
-        # Add status
-        cv2.putText(processed_frame, "YOLO Processing Active (Hailo-8L)", (10, 90), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
-        
-        # Add frame counter
-        cv2.putText(processed_frame, f"Frame: {self.frame_count}", (10, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        
-        # Process Hailo detections
-        if 'detections' in detections:
-            for detection in detections['detections']:
-                if 'bbox' in detection and 'class' in detection:
-                    bbox = detection['bbox']
-                    class_name = detection['class']
-                    confidence = detection.get('confidence', 0.0)
-                    
-                    # Draw bounding box
-                    x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-                    cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    
-                    # Draw label
-                    label = f"{class_name}: {confidence:.2f}"
-                    cv2.putText(processed_frame, label, (x1, y1-10), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         
         return processed_frame
     
@@ -363,7 +417,7 @@ class HailoYOLOProcessor:
         """Main run loop"""
         print("🎯 Starting Hailo YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
-        print("🤖 Real YOLO processing with Hailo-8L")
+        print("🤖 Real YOLO processing with OpenCV")
         print("🔧 Now using MJPEG instead of problematic H.264")
         
         # Setup UDP receiver
