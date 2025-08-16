@@ -11,6 +11,7 @@ print("Python version:", sys.version)
 print("Python executable:", sys.executable)
 print("Current working directory:", os.getcwd())
 print("Python path:", sys.path)
+print("PYTHONPATH env:", os.environ.get('PYTHONPATH', 'Not set'))
 
 # Try to import OpenCV
 try:
