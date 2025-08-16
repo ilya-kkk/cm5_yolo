@@ -102,96 +102,50 @@ class WebRTCVideoViewer:
         """Generate the HTML content for the viewer"""
         return """<!DOCTYPE html>
 <html>
-<head>
-    <title>YOLO Video Stream</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { text-align: center; }
-        .video-container { text-align: center; margin: 20px 0; }
-        #videoCanvas { border: 2px solid #333; background: #000; }
-        .controls { text-align: center; margin: 20px 0; }
-        .btn { padding: 10px 20px; margin: 0 10px; font-size: 16px; cursor: pointer; }
-        .btn-primary { background: #007bff; color: white; border: none; border-radius: 5px; }
-        .btn-secondary { background: #6c757d; color: white; border: none; border-radius: 5px; }
-    </style>
-</head>
+<head><title>YOLO Stream</title></head>
 <body>
-    <div class="container">
-        <h1>YOLO Video Stream - WebRTC</h1>
-        
-        <div class="video-container">
-            <canvas id="videoCanvas" width="640" height="480"></canvas>
-        </div>
-        
-        <div class="controls">
-            <button class="btn btn-primary" id="startBtn" onclick="startStreaming()">Start Streaming</button>
-            <button class="btn btn-secondary" id="stopBtn" onclick="stopStreaming()" disabled>Stop Streaming</button>
-        </div>
-        
-        <div id="status" style="text-align: center; margin: 20px 0;">Ready to connect</div>
-    </div>
+<h1>YOLO Video Stream</h1>
+<canvas id="canvas" width="640" height="480" style="border:1px solid black;"></canvas>
+<br>
+<button onclick="start()">Start</button>
+<button onclick="stop()">Stop</button>
+<script>
+let canvas = document.getElementById('canvas');
+let ctx = canvas.getContext('2d');
+let interval = null;
 
-    <script>
-        const canvas = document.getElementById('videoCanvas');
-        const ctx = canvas.getContext('2d');
-        let isStreaming = false;
-        let streamInterval = null;
-        
-        function startStreaming() {
-            if (isStreaming) return;
-            
-            isStreaming = true;
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            document.getElementById('status').textContent = 'Streaming...';
-            
-            streamInterval = setInterval(streamFrame, 33);
-        }
-        
-        function stopStreaming() {
-            if (!isStreaming) return;
-            
-            isStreaming = false;
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            document.getElementById('status').textContent = 'Stopped';
-            
-            if (streamInterval) {
-                clearInterval(streamInterval);
-                streamInterval = null;
+function start() {
+    if (interval) return;
+    interval = setInterval(async () => {
+        try {
+            let response = await fetch('/frame');
+            if (response.ok) {
+                let blob = await response.blob();
+                let url = URL.createObjectURL(blob);
+                let img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, 640, 480);
+                    ctx.drawImage(img, 0, 0, 640, 480);
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
             }
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } catch (e) {
+            console.error(e);
         }
-        
-        async function streamFrame() {
-            try {
-                const response = await fetch('/frame?' + Date.now(), { cache: 'no-cache' });
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const imageUrl = URL.createObjectURL(blob);
-                    
-                    const img = new Image();
-                    img.onload = () => {
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        URL.revokeObjectURL(imageUrl);
-                    };
-                    
-                    img.src = imageUrl;
-                }
-            } catch (error) {
-                console.error('Frame streaming error:', error);
-            }
-        }
-        
-        // Auto-start streaming after page load
-        window.addEventListener('load', () => {
-            setTimeout(startStreaming, 1000);
-        });
-    </script>
+    }, 100);
+}
+
+function stop() {
+    if (interval) {
+        clearInterval(interval);
+        interval = null;
+        ctx.clearRect(0, 0, 640, 480);
+    }
+}
+
+start();
+</script>
 </body>
 </html>"""
         
