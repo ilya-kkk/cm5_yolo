@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Video Web Service for YOLO Camera Stream
-Simple MJPEG streaming service with test frame generator
+Real-time MJPEG streaming of processed video frames
 """
 
 import asyncio
@@ -24,61 +24,8 @@ class VideoWebService:
         self.port = port
         self.app = web.Application()
         self.setup_routes()
-        self.start_test_frame_generator()
-        
-    def start_test_frame_generator(self):
-        """Start generating test frames in background"""
-        def generate_frames():
-            frame_num = 0
-            while True:
-                try:
-                    # Create a simple test frame using basic Python
-                    frame_path = f"/tmp/processed_frame_{frame_num}.jpg"
-                    
-                    # Create a simple colored frame (640x480)
-                    # Using basic file operations to avoid PIL issues
-                    self.create_simple_frame(frame_path, frame_num)
-                    
-                    # Keep only last 50 frames to avoid disk space issues
-                    old_frames = [f for f in Path('/tmp').glob('processed_frame_*.jpg')]
-                    if len(old_frames) > 50:
-                        for old_frame in sorted(old_frames)[:-50]:
-                            try:
-                                old_frame.unlink()
-                            except:
-                                pass
-                    
-                    frame_num += 1
-                    time.sleep(0.2)  # 5 FPS - slower to avoid crashes
-                    
-                except Exception as e:
-                    logger.error(f"Error generating test frame: {e}")
-                    time.sleep(2)  # Wait longer on error
-        
-        # Start frame generator in background thread
-        frame_thread = threading.Thread(target=generate_frames, daemon=True)
-        frame_thread.start()
-        logger.info("Test frame generator started")
-        
-    def create_simple_frame(self, frame_path: str, frame_num: int):
-        """Create a simple test frame without PIL"""
-        try:
-            # Create a simple colored frame using basic operations
-            # This is a fallback when PIL is not working properly
-            
-            # For now, just create an empty file to avoid errors
-            # The video feed will show a placeholder
-            with open(frame_path, 'w') as f:
-                f.write(f"Test Frame {frame_num}")
-                
-        except Exception as e:
-            logger.error(f"Error creating simple frame: {e}")
-            # Create a minimal file to prevent crashes
-            try:
-                with open(frame_path, 'w') as f:
-                    f.write("frame")
-            except:
-                pass
+        self.last_frame_time = 0
+        self.frame_cache = {}
         
     def setup_routes(self):
         """Setup web routes"""
@@ -102,7 +49,7 @@ class VideoWebService:
             background: #f0f0f0; 
         }
         .container { 
-            max-width: 800px; 
+            max-width: 1000px; 
             margin: 0 auto; 
             background: white; 
             padding: 20px; 
@@ -123,14 +70,16 @@ class VideoWebService:
             height: auto; 
             border: 2px solid #ddd; 
             border-radius: 8px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .status { 
             text-align: center; 
             margin: 20px 0; 
-            padding: 10px; 
+            padding: 15px; 
             background: #e8f5e8; 
             border-radius: 5px; 
             color: #2d5a2d; 
+            font-weight: bold;
         }
         .controls { 
             text-align: center; 
@@ -140,11 +89,12 @@ class VideoWebService:
             background: #007bff; 
             color: white; 
             border: none; 
-            padding: 10px 20px; 
+            padding: 12px 24px; 
             margin: 0 10px; 
             border-radius: 5px; 
             cursor: pointer; 
             font-size: 16px; 
+            transition: background 0.3s;
         }
         button:hover { 
             background: #0056b3; 
@@ -153,45 +103,106 @@ class VideoWebService:
             background: #ccc; 
             cursor: not-allowed; 
         }
+        .info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎥 YOLO Video Stream</h1>
+        <h1>🎥 YOLO Video Stream - Raspberry Pi CM5</h1>
         
-        <div class="status" id="status">
-            📡 Запуск стрима...
+        <div class="info">
+            <strong>📡 Статус:</strong> <span id="status">Запуск стрима...</span><br>
+            <strong>📊 FPS:</strong> <span id="fps">-</span><br>
+            <strong>🖼️ Кадров доступно:</strong> <span id="frameCount">-</span>
         </div>
         
         <div class="video-container">
-            <img id="videoStream" class="video-stream" src="/video_feed" alt="Video Stream">
+            <img id="videoStream" class="video-stream" src="/video_feed" alt="YOLO Video Stream">
         </div>
         
         <div class="controls">
-            <button onclick="refreshStream()" id="refreshBtn">🔄 Обновить</button>
+            <button onclick="refreshStream()" id="refreshBtn">🔄 Обновить стрим</button>
+            <button onclick="checkStatus()" id="statusBtn">📊 Проверить статус</button>
+        </div>
+        
+        <div class="info">
+            <strong>ℹ️ Информация:</strong><br>
+            • Видео обрабатывается в реальном времени с помощью YOLOv8<br>
+            • Камера CSI подключена через MIPI интерфейс<br>
+            • Обработанные кадры сохраняются в /tmp/processed_frame_*.jpg<br>
+            • Веб-интерфейс обновляется автоматически
         </div>
     </div>
 
     <script>
+        let frameCount = 0;
+        let lastFrameTime = Date.now();
+        
         function refreshStream() {
             const videoEl = document.getElementById('videoStream');
-            videoEl.src = '/video_feed?' + new Date().getTime();
+            const timestamp = new Date().getTime();
+            videoEl.src = '/video_feed?' + timestamp;
             document.getElementById('status').textContent = '✅ Стрим обновлен';
+            updateFPS();
+        }
+        
+        function checkStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('frameCount').textContent = data.frames_available;
+                    document.getElementById('status').textContent = '✅ Статус обновлен';
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent = '❌ Ошибка получения статуса';
+                    console.error('Error:', error);
+                });
+        }
+        
+        function updateFPS() {
+            const now = Date.now();
+            const delta = now - lastFrameTime;
+            if (delta > 0) {
+                const fps = Math.round(1000 / delta);
+                document.getElementById('fps').textContent = fps + ' FPS';
+            }
+            lastFrameTime = now;
+            frameCount++;
         }
         
         // Auto-start stream
         window.onload = function() {
             document.getElementById('status').textContent = '✅ Стрим запущен';
+            checkStatus();
+            // Update status every 5 seconds
+            setInterval(checkStatus, 5000);
         };
         
-        // Handle video errors
+        // Handle video events
         document.getElementById('videoStream').onerror = function() {
             document.getElementById('status').textContent = '❌ Ошибка загрузки видео';
         };
         
         document.getElementById('videoStream').onload = function() {
-            document.getElementById('status').textContent = '✅ Видео загружено';
+            updateFPS();
         };
+        
+        // Auto-refresh stream every 30 seconds to prevent timeouts
+        setInterval(refreshStream, 30000);
     </script>
 </body>
 </html>
@@ -214,11 +225,24 @@ class VideoWebService:
         
         try:
             while True:
-                frame_path = self.get_latest_frame_path()
+                frame_path = self.get_latest_valid_frame_path()
                 if frame_path and frame_path.exists():
                     try:
+                        # Check if file is valid JPEG (size > 1KB)
+                        file_size = frame_path.stat().st_size
+                        if file_size < 1024:
+                            logger.warning(f"Frame {frame_path} too small ({file_size} bytes), skipping")
+                            await asyncio.sleep(0.1)
+                            continue
+                        
                         with open(frame_path, 'rb') as f:
                             frame_data = f.read()
+                        
+                        # Verify frame data is not empty
+                        if len(frame_data) == 0:
+                            logger.warning(f"Frame {frame_path} is empty, skipping")
+                            await asyncio.sleep(0.1)
+                            continue
                         
                         # Send frame as MJPEG
                         frame_header = f'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame_data)}\r\n\r\n'
@@ -226,17 +250,18 @@ class VideoWebService:
                         await response.write(frame_data)
                         await response.write(b'\r\n')
                         
-                        # Slower frame rate for stability
-                        await asyncio.sleep(0.5)
+                        # Update last frame time
+                        self.last_frame_time = time.time()
+                        
+                        # Adaptive frame rate based on available frames
+                        await asyncio.sleep(0.1)  # 10 FPS for smooth streaming
                         
                     except Exception as e:
-                        logger.error(f"Error reading frame: {e}")
-                        # Send a simple error frame
-                        error_frame = b'--frame\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nError\r\n'
-                        await response.write(error_frame)
-                        await asyncio.sleep(1)
+                        logger.error(f"Error reading frame {frame_path}: {e}")
+                        await asyncio.sleep(0.5)
                 else:
-                    # No frame available, send placeholder
+                    # No valid frame available, send placeholder
+                    logger.info("No valid frames available, sending placeholder")
                     placeholder = b'--frame\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nNo Frame\r\n'
                     await response.write(placeholder)
                     await asyncio.sleep(1)
@@ -257,24 +282,29 @@ class VideoWebService:
             'status': 'Running',
             'timestamp': time.time(),
             'latest_frame': self.get_latest_frame_number(),
-            'frames_available': self.count_available_frames()
+            'frames_available': self.count_valid_frames(),
+            'last_frame_time': self.last_frame_time,
+            'uptime': time.time() - self.last_frame_time if self.last_frame_time > 0 else 0
         }
         return web.json_response(status)
         
-    def get_latest_frame_path(self) -> Optional[Path]:
-        """Get the path to the latest processed frame"""
+    def get_latest_valid_frame_path(self) -> Optional[Path]:
+        """Get the path to the latest valid processed frame"""
         try:
             frame_files = list(Path('/tmp').glob('processed_frame_*.jpg'))
             if frame_files:
-                latest_frame = max(frame_files, key=lambda x: x.stat().st_mtime)
-                return latest_frame
+                # Filter valid frames (size > 1KB)
+                valid_frames = [f for f in frame_files if f.stat().st_size > 1024]
+                if valid_frames:
+                    latest_frame = max(valid_frames, key=lambda x: x.stat().st_mtime)
+                    return latest_frame
         except Exception as e:
             logger.error(f"Error getting latest frame: {e}")
         return None
         
     def get_latest_frame_number(self) -> int:
         """Get the number of the latest frame"""
-        frame_path = self.get_latest_frame_path()
+        frame_path = self.get_latest_valid_frame_path()
         if frame_path:
             try:
                 frame_name = frame_path.stem
@@ -284,11 +314,12 @@ class VideoWebService:
                 pass
         return 0
         
-    def count_available_frames(self) -> int:
-        """Count available frames in /tmp"""
+    def count_valid_frames(self) -> int:
+        """Count valid frames in /tmp (size > 1KB)"""
         try:
             frame_files = list(Path('/tmp').glob('processed_frame_*.jpg'))
-            return len(frame_files)
+            valid_frames = [f for f in frame_files if f.stat().st_size > 1024]
+            return len(valid_frames)
         except Exception:
             return 0
         
