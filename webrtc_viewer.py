@@ -11,6 +11,7 @@ import os
 import time
 from pathlib import Path
 from typing import Optional
+import threading
 
 import aiohttp
 from aiohttp import web
@@ -28,6 +29,60 @@ class WebRTCVideoViewer:
         self.max_buffer_size = 30  # Keep last 30 frames
         self.last_frame_time = 0
         self.frame_interval = 1.0 / 30.0  # 30 FPS target
+        
+        # Start frame generator in background
+        self.start_frame_generator()
+        
+    def start_frame_generator(self):
+        """Start frame generator in background thread"""
+        def generate_frames():
+            import cv2
+            import numpy as np
+            
+            frame_count = 0
+            while True:
+                try:
+                    # Create a test frame
+                    img = np.zeros((480, 640, 3), dtype=np.uint8)
+                    
+                    # Add visual elements
+                    cv2.rectangle(img, (50, 50), (590, 430), (0, 255, 0), 3)
+                    cv2.putText(img, f'WebRTC Frame {frame_count}', (100, 100), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    
+                    # Add timestamp
+                    timestamp = time.strftime("%H:%M:%S")
+                    cv2.putText(img, timestamp, (100, 150), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    
+                    # Add moving object
+                    x = int(100 + 50 * np.sin(frame_count * 0.1))
+                    y = int(200 + 30 * np.cos(frame_count * 0.15))
+                    cv2.circle(img, (x, y), 20, (0, 0, 255), -1)
+                    
+                    # Save frame
+                    filename = f"/tmp/processed_frame_{frame_count}.jpg"
+                    cv2.imwrite(filename, img)
+                    
+                    logger.info(f"Generated frame {frame_count}: {filename}")
+                    frame_count += 1
+                    
+                    # Clean up old frames
+                    if frame_count > 10:
+                        old_file = f"/tmp/processed_frame_{frame_count - 10}.jpg"
+                        if os.path.exists(old_file):
+                            os.remove(old_file)
+                    
+                    time.sleep(0.1)  # 10 FPS
+                    
+                except Exception as e:
+                    logger.error(f"Frame generation error: {e}")
+                    time.sleep(1)
+        
+        # Start in background thread
+        thread = threading.Thread(target=generate_frames, daemon=True)
+        thread.start()
+        logger.info("Frame generator started in background")
         
     def setup_routes(self):
         """Setup web routes"""
