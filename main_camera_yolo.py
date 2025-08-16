@@ -13,6 +13,7 @@ import socket
 import threading
 import tempfile
 import os
+import subprocess
 from pathlib import Path
 
 class CameraYOLOProcessor:
@@ -49,38 +50,72 @@ class CameraYOLOProcessor:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def decode_h264_frame(self, h264_data):
-        """Decode H.264 data to OpenCV frame"""
+    def decode_h264_with_ffmpeg(self, h264_data):
+        """Decode H.264 data using ffmpeg"""
         try:
             # Write H.264 data to temporary file
             with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
                 temp_file.write(h264_data)
                 temp_file_path = temp_file.name
             
-            # Try to read with OpenCV
-            cap = cv2.VideoCapture(temp_file_path)
+            # Use ffmpeg to decode H.264 to raw video
+            raw_output_path = temp_file_path + '.raw'
             
-            if cap.isOpened():
-                ret, frame = cap.read()
-                cap.release()
+            # ffmpeg command to decode H.264 to raw video
+            cmd = [
+                'ffmpeg', '-y',  # Overwrite output files
+                '-f', 'h264',    # Input format
+                '-i', temp_file_path,  # Input file
+                '-f', 'rawvideo',      # Output format
+                '-pix_fmt', 'rgb24',   # Pixel format
+                '-vcodec', 'rawvideo', # Video codec
+                raw_output_path         # Output file
+            ]
+            
+            # Run ffmpeg
+            result = subprocess.run(cmd, capture_output=True, timeout=5)
+            
+            if result.returncode == 0 and os.path.exists(raw_output_path):
+                # Read raw video data
+                with open(raw_output_path, 'rb') as f:
+                    raw_data = f.read()
                 
-                # Clean up temp file
-                try:
-                    os.unlink(temp_file_path)
-                except:
-                    pass
-                
-                if ret and frame is not None:
+                # Convert raw data to numpy array (640x480 RGB)
+                frame_size = 640 * 480 * 3
+                if len(raw_data) >= frame_size:
+                    frame = np.frombuffer(raw_data[:frame_size], dtype=np.uint8)
+                    frame = frame.reshape((480, 640, 3))
+                    
+                    # Convert RGB to BGR for OpenCV
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    
+                    # Clean up temp files
+                    try:
+                        os.unlink(temp_file_path)
+                        os.unlink(raw_output_path)
+                    except:
+                        pass
+                    
                     return frame
             
-            # Clean up temp file if OpenCV failed
+            # Clean up temp files
             try:
                 os.unlink(temp_file_path)
+                if os.path.exists(raw_output_path):
+                    os.unlink(raw_output_path)
             except:
                 pass
                 
         except Exception as e:
-            print(f"⚠️ H.264 decode error: {e}")
+            print(f"⚠️ FFmpeg H.264 decode error: {e}")
+            # Clean up temp files on error
+            try:
+                if 'temp_file_path' in locals():
+                    os.unlink(temp_file_path)
+                if 'raw_output_path' in locals() and os.path.exists(raw_output_path):
+                    os.unlink(raw_output_path)
+            except:
+                pass
         
         return None
     
@@ -164,7 +199,7 @@ class CameraYOLOProcessor:
                     
                     # Try to decode frame when we have enough data
                     if len(self.h264_buffer) > 1000:  # Minimum size for H.264 frame
-                        frame = self.decode_h264_frame(self.h264_buffer)
+                        frame = self.decode_h264_with_ffmpeg(self.h264_buffer)
                         
                         if frame is not None:
                             print(f"📦 Decoded frame: {frame.shape} from {len(self.h264_buffer)} bytes")
@@ -205,6 +240,7 @@ class CameraYOLOProcessor:
         print("🎯 Starting Camera YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 YOLO processing will be applied to each frame")
+        print("🔧 Using FFmpeg for H.264 decoding")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
