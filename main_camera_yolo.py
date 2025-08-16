@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Main camera YOLO processing script for CM5 with Hailo-8L
-This script properly handles H.264 from libcamera-vid and runs real YOLO inference
+This script handles MJPEG stream from libcamera-vid and runs real YOLO inference
 """
 
 import cv2
@@ -23,7 +23,7 @@ class HailoYOLOProcessor:
         self.running = False
         self.frame_buffer = []
         self.buffer_size = 1024 * 1024  # 1MB buffer
-        self.h264_buffer = b''
+        self.mjpeg_buffer = b''
         self.frame_lock = threading.Lock()
         self.latest_processed_frame = None
         
@@ -33,12 +33,8 @@ class HailoYOLOProcessor:
         self.fps_start_time = time.time()
         self.current_fps = 0
         
-        # H.264 parsing variables
-        self.nal_units = []
+        # MJPEG parsing variables
         self.frame_count = 0
-        self.sps_data = None
-        self.pps_data = None
-        self.keyframe_found = False
         
         # Hailo integration
         self.hailo_device = None
@@ -110,187 +106,58 @@ class HailoYOLOProcessor:
             return None
     
     def setup_udp_receiver(self):
-        """Setup UDP socket to receive H.264 stream from host"""
+        """Setup UDP socket to receive MJPEG stream from host"""
         try:
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.udp_socket.bind(('127.0.0.1', 5000))
             self.udp_socket.settimeout(1.0)
             print("✅ UDP receiver setup on port 5000")
             print("📝 Note: libcamera-vid must be started manually on the host")
-            print("📝 Command: libcamera-vid -t 0 --codec h264 --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
+            print("📝 Command: libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
             return True
         except Exception as e:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def try_multiple_decoding_methods(self, h264_data):
-        """Try multiple methods to decode H.264 stream"""
-        print(f"🔧 Trying multiple H.264 decoding methods for {len(h264_data)} bytes...")
-        
-        # Method 1: Try direct FFmpeg decode
-        frame = self.try_ffmpeg_direct_decode(h264_data)
-        if frame is not None:
-            return frame
-        
-        # Method 2: Try with different FFmpeg parameters
-        frame = self.try_ffmpeg_with_params(h264_data)
-        if frame is not None:
-            return frame
-        
-        # Method 3: Try to extract frame data manually
-        frame = self.try_manual_frame_extraction(h264_data)
-        if frame is not None:
-            return frame
-        
-        print("❌ All decoding methods failed")
-        return None
-    
-    def try_ffmpeg_direct_decode(self, h264_data):
-        """Try direct FFmpeg decode without modifications"""
+    def decode_mjpeg_frame(self, mjpeg_data):
+        """Decode MJPEG frame from UDP data"""
         try:
-            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
-                temp_file.write(h264_data)
-                temp_file_path = temp_file.name
+            # MJPEG frames start with JPEG start marker
+            jpeg_start = b'\xff\xd8'
+            jpeg_end = b'\xff\xd9'
             
-            jpeg_output_path = temp_file_path + '.jpg'
-            
-            cmd = [
-                'ffmpeg', '-y',
-                '-f', 'h264',
-                '-i', temp_file_path,
-                '-vframes', '1',
-                '-q:v', '2',
-                jpeg_output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, timeout=10)
-            
-            if result.returncode == 0 and os.path.exists(jpeg_output_path):
-                frame = cv2.imread(jpeg_output_path)
-                if frame is not None and frame.size > 0:
-                    print("✅ Direct FFmpeg decode successful")
-                    return frame
-            
-            # Cleanup
-            try:
-                os.unlink(temp_file_path)
-                if os.path.exists(jpeg_output_path):
-                    os.unlink(jpeg_output_path)
-            except:
-                pass
-                
-        except Exception as e:
-            print(f"⚠️ Direct FFmpeg decode failed: {e}")
-        
-        return None
-    
-    def try_ffmpeg_with_params(self, h264_data):
-        """Try FFmpeg with different parameters"""
-        try:
-            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
-                temp_file.write(h264_data)
-                temp_file_path = temp_file.name
-            
-            jpeg_output_path = temp_file_path + '.jpg'
-            
-            # Try with different parameters
-            cmd = [
-                'ffmpeg', '-y',
-                '-f', 'h264',
-                '-i', temp_file_path,
-                '-vframes', '1',
-                '-q:v', '2',
-                '-pix_fmt', 'yuv420p',
-                '-vf', 'scale=640:480',
-                jpeg_output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, timeout=10)
-            
-            if result.returncode == 0 and os.path.exists(jpeg_output_path):
-                frame = cv2.imread(jpeg_output_path)
-                if frame is not None and frame.size > 0:
-                    print("✅ FFmpeg with params decode successful")
-                    return frame
-            
-            # Cleanup
-            try:
-                os.unlink(temp_file_path)
-                if os.path.exists(jpeg_output_path):
-                    os.unlink(jpeg_output_path)
-            except:
-                pass
-                
-        except Exception as e:
-            print(f"⚠️ FFmpeg with params decode failed: {e}")
-        
-        return None
-    
-    def try_manual_frame_extraction(self, h264_data):
-        """Try to manually extract frame data"""
-        try:
-            # Look for start codes
-            start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
-            
-            # Find first start code
-            first_start = -1
-            for start_code in start_codes:
-                pos = h264_data.find(start_code)
-                if pos != -1:
-                    first_start = pos
-                    break
-            
-            if first_start == -1:
-                print("⚠️ No start codes found in H.264 data")
+            # Find JPEG start and end
+            start_pos = mjpeg_data.find(jpeg_start)
+            if start_pos == -1:
+                print("⚠️ No JPEG start marker found")
                 return None
             
-            # Extract data from first start code
-            frame_data = h264_data[first_start:]
+            end_pos = mjpeg_data.find(jpeg_end, start_pos)
+            if end_pos == -1:
+                print("⚠️ No JPEG end marker found")
+                return None
             
-            # Try to create a minimal valid H.264 stream
-            # Add a simple SPS header for 640x480
-            minimal_sps = b'\x00\x00\x00\x01\x67\x42\x00\x1E\x95\xA0\x28\x0F\x68\x40\x00\x00\x03\x00\x40\x00\x00\x0F\x03\xC6\x0C\x44\x80'
-            minimal_pps = b'\x00\x00\x00\x01\x68\xCE\x3C\x80'
+            # Extract complete JPEG frame
+            jpeg_frame = mjpeg_data[start_pos:end_pos + 2]
             
-            # Create minimal stream
-            minimal_stream = minimal_sps + minimal_pps + frame_data
+            if len(jpeg_frame) < 100:  # Too small to be valid JPEG
+                print(f"⚠️ JPEG frame too small: {len(jpeg_frame)} bytes")
+                return None
             
-            # Try to decode minimal stream
-            with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
-                temp_file.write(minimal_stream)
-                temp_file_path = temp_file.name
+            # Decode JPEG using OpenCV
+            jpeg_array = np.frombuffer(jpeg_frame, dtype=np.uint8)
+            frame = cv2.imdecode(jpeg_array, cv2.IMREAD_COLOR)
             
-            jpeg_output_path = temp_file_path + '.jpg'
-            
-            cmd = [
-                'ffmpeg', '-y',
-                '-f', 'h264',
-                '-i', temp_file_path,
-                '-vframes', '1',
-                '-q:v', '2',
-                jpeg_output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, timeout=10)
-            
-            if result.returncode == 0 and os.path.exists(jpeg_output_path):
-                frame = cv2.imread(jpeg_output_path)
-                if frame is not None and frame.size > 0:
-                    print("✅ Manual frame extraction successful")
-                    return frame
-            
-            # Cleanup
-            try:
-                os.unlink(temp_file_path)
-                if os.path.exists(jpeg_output_path):
-                    os.unlink(jpeg_output_path)
-            except:
-                pass
+            if frame is not None and frame.size > 0:
+                print(f"✅ Successfully decoded MJPEG frame: {frame.shape}")
+                return frame
+            else:
+                print("⚠️ Failed to decode MJPEG frame")
+                return None
                 
         except Exception as e:
-            print(f"⚠️ Manual frame extraction failed: {e}")
-        
-        return None
+            print(f"⚠️ MJPEG decode error: {e}")
+            return None
     
     def run_yolo_inference(self, frame):
         """Run YOLO inference using Hailo-8L"""
@@ -434,28 +301,28 @@ class HailoYOLOProcessor:
             print(f"⚠️ Error saving processed frame: {e}")
             return False
     
-    def process_h264_stream(self):
-        """Process incoming H.264 stream and extract frames"""
-        print("📹 Starting H.264 stream processing...")
-        print("⏳ Waiting for libcamera-vid stream from host...")
-        print("🔧 Will try multiple decoding methods")
+    def process_mjpeg_stream(self):
+        """Process incoming MJPEG stream and extract frames"""
+        print("📹 Starting MJPEG stream processing...")
+        print("⏳ Waiting for libcamera-vid MJPEG stream from host...")
+        print("🔧 MJPEG is much easier to decode than H.264")
         
         while self.running:
             try:
-                # Receive H.264 data
+                # Receive MJPEG data
                 data, addr = self.udp_socket.recvfrom(self.buffer_size)
                 
                 if data:
-                    # Add to H.264 buffer
-                    self.h264_buffer += data
+                    # Add to MJPEG buffer
+                    self.mjpeg_buffer += data
                     
                     # Try to decode frame when we have enough data
-                    if len(self.h264_buffer) > 10000:  # Minimum size for H.264 frame
-                        print(f"📦 Received {len(data)} bytes, total buffer: {len(self.h264_buffer)} bytes")
-                        print(f"🔧 Attempting to decode H.264 frame...")
+                    if len(self.mjpeg_buffer) > 1000:  # Minimum size for MJPEG frame
+                        print(f"📦 Received {len(data)} bytes, total buffer: {len(self.mjpeg_buffer)} bytes")
+                        print(f"🔧 Attempting to decode MJPEG frame...")
                         
-                        # Try multiple decoding methods
-                        frame = self.try_multiple_decoding_methods(self.h264_buffer)
+                        # Try to decode MJPEG frame
+                        frame = self.decode_mjpeg_frame(self.mjpeg_buffer)
                         
                         if frame is not None:
                             print(f"🎯 SUCCESS! Decoded real camera frame: {frame.shape}")
@@ -476,12 +343,12 @@ class HailoYOLOProcessor:
                                     print(f"🎯 Real Camera YOLO Processing FPS: {self.current_fps}")
                             
                             # Clear buffer after successful decode
-                            self.h264_buffer = b''
+                            self.mjpeg_buffer = b''
                         else:
-                            print(f"⚠️ Failed to decode frame, keeping buffer for next attempt")
+                            print(f"⚠️ Failed to decode MJPEG frame, keeping buffer for next attempt")
                             # Keep some data for next attempt
-                            if len(self.h264_buffer) > 1024 * 1024:  # 1MB limit
-                                self.h264_buffer = self.h264_buffer[-512 * 1024:]  # Keep last 512KB
+                            if len(self.mjpeg_buffer) > 1024 * 1024:  # 1MB limit
+                                self.mjpeg_buffer = self.mjpeg_buffer[-512 * 1024:]  # Keep last 512KB
                     
             except socket.timeout:
                 continue
@@ -490,14 +357,14 @@ class HailoYOLOProcessor:
                     print(f"⚠️ Error processing stream: {e}")
                 break
         
-        print("🛑 H.264 stream processing stopped")
+        print("🛑 MJPEG stream processing stopped")
     
     def run(self):
         """Main run loop"""
         print("🎯 Starting Hailo YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 Real YOLO processing with Hailo-8L")
-        print("🔧 Will try multiple H.264 decoding methods")
+        print("🔧 Now using MJPEG instead of problematic H.264")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
@@ -507,7 +374,7 @@ class HailoYOLOProcessor:
         self.running = True
         
         # Start stream processing in separate thread
-        stream_thread = threading.Thread(target=self.process_h264_stream)
+        stream_thread = threading.Thread(target=self.process_mjpeg_stream)
         stream_thread.daemon = True
         stream_thread.start()
         
@@ -517,7 +384,7 @@ class HailoYOLOProcessor:
         print("💾 Processed frames saved to /tmp/latest_yolo_frame.jpg")
         print("")
         print("🔧 To start video stream, run on the host:")
-        print("   libcamera-vid -t 0 --codec h264 --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
+        print("   libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
         
         try:
             # Keep main thread alive
