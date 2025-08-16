@@ -3,4 +3,5 @@ numpy>=1.24.0
 aiohttp>=3.8.0
 aiohttp-cors>=0.7.0
 ultralytics>=8.0.0
+Pillow>=9.0.0
 # hailo-platform>=4.0.0  # Commented out - not available for ARM64 

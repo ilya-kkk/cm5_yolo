@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Video Web Service for YOLO Camera Stream
-Simple MJPEG streaming service
+Simple MJPEG streaming service with test frame generator
 """
 
 import asyncio
@@ -10,9 +10,12 @@ import os
 import time
 from pathlib import Path
 from typing import Optional
+import threading
 
 import aiohttp
 from aiohttp import web
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +26,72 @@ class VideoWebService:
         self.port = port
         self.app = web.Application()
         self.setup_routes()
+        self.start_test_frame_generator()
+        
+    def start_test_frame_generator(self):
+        """Start generating test frames in background"""
+        def generate_frames():
+            frame_num = 0
+            while True:
+                try:
+                    # Create a test frame
+                    img = Image.new('RGB', (640, 480), color='black')
+                    draw = ImageDraw.Draw(img)
+                    
+                    # Add timestamp and frame number
+                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                    text = f"Test Frame {frame_num}\n{timestamp}\nYOLO Video Stream"
+                    
+                    # Try to use a font, fallback to default if not available
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+                    except:
+                        font = ImageFont.load_default()
+                    
+                    # Calculate text position (center)
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    x = (640 - text_width) // 2
+                    y = (480 - text_height) // 2
+                    
+                    # Draw text with outline
+                    for dx in [-1, 0, 1]:
+                        for dy in [-1, 0, 1]:
+                            if dx != 0 or dy != 0:
+                                draw.text((x + dx, y + dy), text, font=font, fill='black')
+                    draw.text((x, y), text, font=font, fill='white')
+                    
+                    # Add some visual elements
+                    for i in range(5):
+                        x1 = (frame_num * 10 + i * 50) % 640
+                        y1 = (frame_num * 5 + i * 30) % 480
+                        draw.ellipse([x1, y1, x1 + 20, y1 + 20], fill='red')
+                    
+                    # Save frame
+                    frame_path = f"/tmp/processed_frame_{frame_num}.jpg"
+                    img.save(frame_path, "JPEG", quality=85)
+                    
+                    # Keep only last 100 frames
+                    old_frames = [f for f in Path('/tmp').glob('processed_frame_*.jpg')]
+                    if len(old_frames) > 100:
+                        for old_frame in sorted(old_frames)[:-100]:
+                            try:
+                                old_frame.unlink()
+                            except:
+                                pass
+                    
+                    frame_num += 1
+                    time.sleep(0.1)  # 10 FPS
+                    
+                except Exception as e:
+                    logger.error(f"Error generating test frame: {e}")
+                    time.sleep(1)
+        
+        # Start frame generator in background thread
+        frame_thread = threading.Thread(target=generate_frames, daemon=True)
+        frame_thread.start()
+        logger.info("Test frame generator started")
         
     def setup_routes(self):
         """Setup web routes"""
