@@ -32,6 +32,10 @@ class CameraYOLOProcessor:
         self.fps_start_time = time.time()
         self.current_fps = 0
         
+        # H.264 parsing variables
+        self.nal_units = []
+        self.frame_count = 0
+        
         # Create output directory for processed frames
         self.output_dir = Path("/tmp/yolo_frames")
         self.output_dir.mkdir(exist_ok=True)
@@ -50,59 +54,80 @@ class CameraYOLOProcessor:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def decode_h264_with_ffmpeg(self, h264_data):
-        """Decode H.264 data using ffmpeg"""
+    def find_nal_units(self, data):
+        """Find NAL units in H.264 data"""
+        nal_units = []
+        start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
+        
+        # Find all start codes
+        positions = []
+        for start_code in start_codes:
+            pos = 0
+            while True:
+                pos = data.find(start_code, pos)
+                if pos == -1:
+                    break
+                positions.append(pos)
+                pos += 1
+        
+        positions.sort()
+        
+        # Extract NAL units
+        for i, pos in enumerate(positions):
+            if i + 1 < len(positions):
+                end_pos = positions[i + 1]
+                nal_unit = data[pos:end_pos]
+            else:
+                nal_unit = data[pos:]
+            
+            if len(nal_unit) > 4:  # Minimum NAL unit size
+                nal_units.append(nal_unit)
+        
+        return nal_units
+    
+    def decode_h264_frame_simple(self, h264_data):
+        """Simple H.264 decoding using ffmpeg with better error handling"""
         try:
             # Write H.264 data to temporary file
             with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
                 temp_file.write(h264_data)
                 temp_file_path = temp_file.name
             
-            # Use ffmpeg to decode H.264 to raw video
-            raw_output_path = temp_file_path + '.raw'
+            # Use ffmpeg to decode H.264 to JPEG directly
+            jpeg_output_path = temp_file_path + '.jpg'
             
-            # ffmpeg command to decode H.264 to raw video
+            # ffmpeg command to decode H.264 to JPEG
             cmd = [
                 'ffmpeg', '-y',  # Overwrite output files
                 '-f', 'h264',    # Input format
                 '-i', temp_file_path,  # Input file
-                '-f', 'rawvideo',      # Output format
-                '-pix_fmt', 'rgb24',   # Pixel format
-                '-vcodec', 'rawvideo', # Video codec
-                raw_output_path         # Output file
+                '-vframes', '1',       # Extract only 1 frame
+                '-q:v', '2',           # High quality
+                jpeg_output_path        # Output file
             ]
             
-            # Run ffmpeg
-            result = subprocess.run(cmd, capture_output=True, timeout=5)
+            # Run ffmpeg with shorter timeout
+            result = subprocess.run(cmd, capture_output=True, timeout=3)
             
-            if result.returncode == 0 and os.path.exists(raw_output_path):
-                # Read raw video data
-                with open(raw_output_path, 'rb') as f:
-                    raw_data = f.read()
+            if result.returncode == 0 and os.path.exists(jpeg_output_path):
+                # Read the JPEG frame
+                frame = cv2.imread(jpeg_output_path)
                 
-                # Convert raw data to numpy array (640x480 RGB)
-                frame_size = 640 * 480 * 3
-                if len(raw_data) >= frame_size:
-                    frame = np.frombuffer(raw_data[:frame_size], dtype=np.uint8)
-                    frame = frame.reshape((480, 640, 3))
-                    
-                    # Convert RGB to BGR for OpenCV
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                    
-                    # Clean up temp files
-                    try:
-                        os.unlink(temp_file_path)
-                        os.unlink(raw_output_path)
-                    except:
-                        pass
-                    
+                # Clean up temp files
+                try:
+                    os.unlink(temp_file_path)
+                    os.unlink(jpeg_output_path)
+                except:
+                    pass
+                
+                if frame is not None and frame.size > 0:
                     return frame
             
             # Clean up temp files
             try:
                 os.unlink(temp_file_path)
-                if os.path.exists(raw_output_path):
-                    os.unlink(raw_output_path)
+                if os.path.exists(jpeg_output_path):
+                    os.unlink(jpeg_output_path)
             except:
                 pass
                 
@@ -112,8 +137,8 @@ class CameraYOLOProcessor:
             try:
                 if 'temp_file_path' in locals():
                     os.unlink(temp_file_path)
-                if 'raw_output_path' in locals() and os.path.exists(raw_output_path):
-                    os.unlink(raw_output_path)
+                if 'jpeg_output_path' in locals() and os.path.exists(jpeg_output_path):
+                    os.unlink(jpeg_output_path)
             except:
                 pass
         
@@ -143,6 +168,10 @@ class CameraYOLOProcessor:
             cv2.putText(processed_frame, "YOLO Processing Active", (10, 90), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
             
+            # Add frame counter
+            cv2.putText(processed_frame, f"Frame: {self.frame_count}", (10, 120), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            
             # Add a simple motion detection indicator
             if hasattr(self, 'prev_frame') and self.prev_frame is not None:
                 # Calculate frame difference for motion detection
@@ -151,10 +180,11 @@ class CameraYOLOProcessor:
                 motion_score = np.mean(diff)
                 
                 if motion_score > 10:  # Motion threshold
-                    cv2.putText(processed_frame, "Motion Detected", (10, 120), 
+                    cv2.putText(processed_frame, "Motion Detected", (10, 150), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
             self.prev_frame = frame.copy()
+            self.frame_count += 1
             
             return processed_frame
             
@@ -198,11 +228,13 @@ class CameraYOLOProcessor:
                     self.h264_buffer += data
                     
                     # Try to decode frame when we have enough data
-                    if len(self.h264_buffer) > 1000:  # Minimum size for H.264 frame
-                        frame = self.decode_h264_with_ffmpeg(self.h264_buffer)
+                    if len(self.h264_buffer) > 5000:  # Minimum size for H.264 frame
+                        print(f"📦 Received {len(self.h264_buffer)} bytes, attempting decode...")
+                        
+                        frame = self.decode_h264_frame_simple(self.h264_buffer)
                         
                         if frame is not None:
-                            print(f"📦 Decoded frame: {frame.shape} from {len(self.h264_buffer)} bytes")
+                            print(f"✅ Decoded frame: {frame.shape} from {len(self.h264_buffer)} bytes")
                             
                             # Process frame with YOLO
                             processed_frame = self.process_frame_with_yolo(frame)
@@ -221,10 +253,11 @@ class CameraYOLOProcessor:
                             
                             # Clear buffer after successful decode
                             self.h264_buffer = b''
-                            
-                            # Limit buffer size to prevent memory issues
+                        else:
+                            print(f"⚠️ Failed to decode frame from {len(self.h264_buffer)} bytes")
+                            # Keep some data for next attempt
                             if len(self.h264_buffer) > 1024 * 1024:  # 1MB limit
-                                self.h264_buffer = self.h264_buffer[-512 * 1024:]  # Keep last 512KB
+                                self.h264_buffer = self.h264_buffer[-256 * 1024:]  # Keep last 256KB
                     
             except socket.timeout:
                 continue
@@ -240,7 +273,7 @@ class CameraYOLOProcessor:
         print("🎯 Starting Camera YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 YOLO processing will be applied to each frame")
-        print("🔧 Using FFmpeg for H.264 decoding")
+        print("🔧 Using FFmpeg for H.264 decoding (simplified)")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
