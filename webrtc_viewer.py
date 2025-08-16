@@ -103,31 +103,22 @@ class WebRTCVideoViewer:
         return """<!DOCTYPE html>
 <html>
 <head>
-    <title>YOLO Video Stream - WebRTC</title>
+    <title>YOLO Video Stream</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-        h1 { text-align: center; color: #333; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; }
         .video-container { text-align: center; margin: 20px 0; }
         #videoCanvas { border: 2px solid #333; background: #000; }
         .controls { text-align: center; margin: 20px 0; }
         .btn { padding: 10px 20px; margin: 0 10px; font-size: 16px; cursor: pointer; }
         .btn-primary { background: #007bff; color: white; border: none; border-radius: 5px; }
         .btn-secondary { background: #6c757d; color: white; border: none; border-radius: 5px; }
-        .status { text-align: center; margin: 20px 0; padding: 10px; background: #e9ecef; border-radius: 5px; }
-        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 20px 0; }
-        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 5px; text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
-        .stat-label { color: #6c757d; margin-top: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎥 YOLO Video Stream - WebRTC</h1>
-        
-        <div class="status">
-            <span id="statusText">Ready to connect</span>
-        </div>
+        <h1>YOLO Video Stream - WebRTC</h1>
         
         <div class="video-container">
             <canvas id="videoCanvas" width="640" height="480"></canvas>
@@ -138,131 +129,67 @@ class WebRTCVideoViewer:
             <button class="btn btn-secondary" id="stopBtn" onclick="stopStreaming()" disabled>Stop Streaming</button>
         </div>
         
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-value" id="fpsValue">0</div>
-                <div class="stat-label">FPS</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="latencyValue">0ms</div>
-                <div class="stat-label">Latency</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="frameCountValue">0</div>
-                <div class="stat-label">Frames</div>
-            </div>
-        </div>
+        <div id="status" style="text-align: center; margin: 20px 0;">Ready to connect</div>
     </div>
 
     <script>
-        class YOLOVideoStreamer {
-            constructor() {
-                this.canvas = document.getElementById('videoCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.isStreaming = false;
-                this.streamInterval = null;
-                this.frameCount = 0;
-                this.lastFrameTime = 0;
-                this.fps = 0;
-                this.latency = 0;
-                
-                this.updateStatus('Disconnected');
-            }
-            
-            async startStreaming() {
-                if (this.isStreaming) return;
-                
-                this.isStreaming = true;
-                this.updateStatus('Connecting...');
-                this.updateButtons(true);
-                
-                this.streamInterval = setInterval(() => {
-                    this.streamFrame();
-                }, 33);
-                
-                this.updateStatus('Connected - Streaming');
-            }
-            
-            async streamFrame() {
-                const startTime = performance.now();
-                
-                try {
-                    const response = await fetch('/frame?' + Date.now(), { cache: 'no-cache' });
-                    
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        const imageUrl = URL.createObjectURL(blob);
-                        
-                        const img = new Image();
-                        img.onload = () => {
-                            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-                            this.updateStats(startTime);
-                            URL.revokeObjectURL(imageUrl);
-                        };
-                        
-                        img.src = imageUrl;
-                    }
-                } catch (error) {
-                    console.error('Frame streaming error:', error);
-                }
-            }
-            
-            updateStats(startTime) {
-                const now = performance.now();
-                this.latency = Math.round(now - startTime);
-                this.frameCount++;
-                
-                if (this.lastFrameTime > 0) {
-                    const deltaTime = now - this.lastFrameTime;
-                    this.fps = Math.round(1000 / deltaTime);
-                }
-                this.lastFrameTime = now;
-                
-                document.getElementById('fpsValue').textContent = this.fps;
-                document.getElementById('latencyValue').textContent = this.latency + 'ms';
-                document.getElementById('frameCountValue').textContent = this.frameCount;
-            }
-            
-            stopStreaming() {
-                if (!this.isStreaming) return;
-                
-                this.isStreaming = false;
-                this.updateStatus('Disconnected');
-                this.updateButtons(false);
-                
-                if (this.streamInterval) {
-                    clearInterval(this.streamInterval);
-                    this.streamInterval = null;
-                }
-                
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            }
-            
-            updateButtons(streaming) {
-                document.getElementById('startBtn').disabled = streaming;
-                document.getElementById('stopBtn').disabled = !streaming;
-            }
-            
-            updateStatus(message) {
-                document.getElementById('statusText').textContent = message;
-            }
-        }
-        
-        const streamer = new YOLOVideoStreamer();
+        const canvas = document.getElementById('videoCanvas');
+        const ctx = canvas.getContext('2d');
+        let isStreaming = false;
+        let streamInterval = null;
         
         function startStreaming() {
-            streamer.startStreaming();
+            if (isStreaming) return;
+            
+            isStreaming = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').textContent = 'Streaming...';
+            
+            streamInterval = setInterval(streamFrame, 33);
         }
         
         function stopStreaming() {
-            streamer.stopStreaming();
+            if (!isStreaming) return;
+            
+            isStreaming = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = 'Stopped';
+            
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                streamInterval = null;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
         
+        async function streamFrame() {
+            try {
+                const response = await fetch('/frame?' + Date.now(), { cache: 'no-cache' });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const imageUrl = URL.createObjectURL(blob);
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        URL.revokeObjectURL(imageUrl);
+                    };
+                    
+                    img.src = imageUrl;
+                }
+            } catch (error) {
+                console.error('Frame streaming error:', error);
+            }
+        }
+        
+        // Auto-start streaming after page load
         window.addEventListener('load', () => {
-            setTimeout(() => {
-                streamer.startStreaming();
-            }, 1000);
+            setTimeout(startStreaming, 1000);
         });
     </script>
 </body>
