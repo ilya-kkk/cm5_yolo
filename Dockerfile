@@ -34,12 +34,6 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install HailoRT and Python packages
-RUN apt-get update && apt-get install -y \
-    hailort \
-    python3-hailort \
-    && rm -rf /var/lib/apt/lists/*
-
 # Set working directory
 WORKDIR /workspace
 
