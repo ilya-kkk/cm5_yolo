@@ -37,11 +37,12 @@ services:
     container_name: hailo_web_stream_service
     volumes:
       - .:/workspace
+      - /tmp:/tmp  # Access to temp files
     environment:
       - PYTHONPATH=/workspace
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
-    command: ["python3", "/workspace/web_stream_service.py"]
+    command: ["python3", "/workspace/web_stream_service_status.py"]
     depends_on:
       - yolo-camera-stream 
