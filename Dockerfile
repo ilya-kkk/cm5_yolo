@@ -41,8 +41,8 @@ WORKDIR /workspace
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Install OpenCV via pip to avoid conflicts with system packages
-RUN pip3 install --no-cache-dir opencv-python
+# Install NumPy and OpenCV via pip to avoid conflicts with system packages
+RUN pip3 install --no-cache-dir numpy opencv-python
 
 # Copy application code
 COPY . .
