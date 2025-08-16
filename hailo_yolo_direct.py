@@ -6,16 +6,18 @@ Direct Hailo YOLO processing using working Python API
 import sys
 import os
 
-# Add system Python path for OpenCV
-sys.path.insert(0, '/usr/lib/python3/dist-packages')
+print("=== Hailo YOLO Direct Test ===")
+print("Python version:", sys.version)
+print("Python executable:", sys.executable)
+print("Current working directory:", os.getcwd())
+print("Python path:", sys.path)
 
-print("Python path after modification:", sys.path)
-
-# Now import cv2 after fixing the path
+# Try to import OpenCV
 try:
     import cv2
     print("✅ OpenCV imported successfully")
     print("OpenCV version:", cv2.__version__)
+    print("OpenCV path:", cv2.__file__)
 except ImportError as e:
     print(f"❌ Failed to import OpenCV: {e}")
     print("Available paths:", sys.path)
