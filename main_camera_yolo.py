@@ -96,7 +96,9 @@ class HailoYOLOProcessor:
                 "/usr/local/share/yolo/yolov4.cfg",
                 "/opt/yolo/yolov4.cfg",
                 "/home/cm5/yolo_models/yolov3.cfg",  # Home directory
-                "/home/cm5/yolo_models/yolov4.cfg"   # Home directory
+                "/home/cm5/yolo_models/yolov4.cfg",  # Home directory
+                "/workspace/yolo_models/yolov3.cfg",  # Workspace directory
+                "/workspace/yolo_models/yolov4.cfg"   # Workspace directory
             ]
             
             possible_weights = [
@@ -107,7 +109,9 @@ class HailoYOLOProcessor:
                 "/usr/local/share/yolo/yolov4.weights",
                 "/opt/yolo/yolov4.weights",
                 "/home/cm5/yolo_models/yolov3.weights",  # Home directory
-                "/home/cm5/yolo_models/yolov4.weights"   # Home directory
+                "/home/cm5/yolo_models/yolov4.weights",  # Home directory
+                "/workspace/yolo_models/yolov3.weights",  # Workspace directory
+                "/workspace/yolo_models/yolov4.weights"   # Workspace directory
             ]
             
             print("📁 Checking possible config paths:")
