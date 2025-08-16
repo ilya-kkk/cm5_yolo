@@ -3,21 +3,22 @@
 Direct Hailo YOLO processing using working Python API
 """
 
+import sys
+import os
+
+# Add system Python path for Hailo BEFORE any other imports
+sys.path.insert(0, '/usr/lib/python3/dist-packages')
+
 import cv2
 import numpy as np
 import time
 import signal
-import sys
 import socket
 import threading
 import tempfile
-import os
 import subprocess
 import json
 from pathlib import Path
-
-# Add system Python path for Hailo
-sys.path.insert(0, '/usr/lib/python3/dist-packages')
 
 # Hailo imports
 try:
@@ -25,9 +26,9 @@ try:
     from hailo_platform import Device, HEF, ConfiguredNetwork, InputVStream, OutputVStream
     HAILO_AVAILABLE = True
     print("✅ Hailo platform imported successfully")
-except ImportError:
+except ImportError as e:
     HAILO_AVAILABLE = False
-    print("⚠️ Hailo platform not available")
+    print(f"⚠️ Hailo platform not available: {e}")
 
 class HailoYOLOProcessor:
     def __init__(self):
