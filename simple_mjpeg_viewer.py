@@ -30,6 +30,19 @@ class SimpleMJPEGViewer:
         self.app.router.add_get('/video_feed', self.video_feed_handler)
         self.app.router.add_get('/status', self.status_handler)
         
+    async def cors_middleware(self, request, handler):
+        """CORS middleware for cross-origin requests"""
+        response = await handler(request)
+        
+        # Set CORS headers for all responses
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
+        response.headers['Access-Control-Max-Age'] = '86400'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range'
+        
+        return response
+        
     async def index_handler(self, request):
         """Serve the main HTML page"""
         html_content = self.get_html_content()
@@ -408,19 +421,36 @@ class SimpleMJPEGViewer:
                 // Monitor stream start/stop
                 this.videoElement.addEventListener('loadstart', () => {
                     this.updateConnectionStatus('connecting');
+                    console.log('Stream loadstart event');
                 });
                 
                 this.videoElement.addEventListener('canplay', () => {
                     this.updateConnectionStatus('connected');
                     this.loadingMessage.style.display = 'none';
                     this.videoElement.style.display = 'block';
+                    console.log('Stream canplay event');
                 });
                 
-                this.videoElement.addEventListener('error', () => {
+                this.videoElement.addEventListener('error', (e) => {
+                    console.error('Stream error event:', e);
+                    console.error('Error details:', this.videoElement.error);
                     this.updateConnectionStatus('disconnected');
                     this.loadingMessage.style.display = 'block';
                     this.videoElement.style.display = 'none';
-                    this.loadingMessage.innerHTML = '<h3>Stream Error</h3><p>Failed to load video stream</p>';
+                    this.loadingMessage.innerHTML = '<h3>Stream Error</h3><p>Failed to load video stream</p><p>Check console for details</p>';
+                });
+                
+                // Add more event listeners for debugging
+                this.videoElement.addEventListener('loadend', () => {
+                    console.log('Stream loadend event');
+                });
+                
+                this.videoElement.addEventListener('abort', () => {
+                    console.log('Stream abort event');
+                });
+                
+                this.videoElement.addEventListener('stalled', () => {
+                    console.log('Stream stalled event');
                 });
             }
             
