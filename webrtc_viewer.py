@@ -100,173 +100,25 @@ class WebRTCVideoViewer:
         
     def get_html_content(self) -> str:
         """Generate the HTML content for the viewer"""
-        return """
-<!DOCTYPE html>
-<html lang="en">
+        return """<!DOCTYPE html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YOLO Video Stream - WebRTC</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
-        
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-            max-width: 800px;
-            width: 100%;
-        }
-        
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            font-weight: 700;
-        }
-        
-        .video-container {
-            position: relative;
-            width: 100%;
-            max-width: 640px;
-            margin: 0 auto 20px;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        }
-        
-        #videoCanvas {
-            width: 100%;
-            height: auto;
-            border-radius: 15px;
-            background: #000;
-        }
-        
-        .controls {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
-        }
-        
-        .status {
-            text-align: center;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-        
-        .stat-card {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            border: 1px solid #e9ecef;
-        }
-        
-        .stat-value {
-            font-size: 1.5em;
-            font-weight: 700;
-            color: #667eea;
-        }
-        
-        .stat-label {
-            color: #6c757d;
-            font-size: 0.9em;
-            margin-top: 5px;
-        }
-        
-        .connection-status {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        
-        .connected { background: #28a745; }
-        .disconnected { background: #dc3545; }
-        .connecting { background: #ffc107; }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-            
-            .controls {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .btn {
-                width: 100%;
-                max-width: 300px;
-            }
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        h1 { text-align: center; color: #333; }
+        .video-container { text-align: center; margin: 20px 0; }
+        #videoCanvas { border: 2px solid #333; background: #000; }
+        .controls { text-align: center; margin: 20px 0; }
+        .btn { padding: 10px 20px; margin: 0 10px; font-size: 16px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; border: none; border-radius: 5px; }
+        .btn-secondary { background: #6c757d; color: white; border: none; border-radius: 5px; }
+        .status { text-align: center; margin: 20px 0; padding: 10px; background: #e9ecef; border-radius: 5px; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 20px 0; }
+        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 5px; text-align: center; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        .stat-label { color: #6c757d; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -274,7 +126,6 @@ class WebRTCVideoViewer:
         <h1>🎥 YOLO Video Stream - WebRTC</h1>
         
         <div class="status">
-            <span class="connection-status" id="connectionStatus"></span>
             <span id="statusText">Ready to connect</span>
         </div>
         
@@ -283,12 +134,8 @@ class WebRTCVideoViewer:
         </div>
         
         <div class="controls">
-            <button class="btn btn-primary" id="startBtn" onclick="startStreaming()">
-                🚀 Start Streaming
-            </button>
-            <button class="btn btn-secondary" id="stopBtn" onclick="stopStreaming()" disabled>
-                ⏹️ Stop Streaming
-            </button>
+            <button class="btn btn-primary" id="startBtn" onclick="startStreaming()">Start Streaming</button>
+            <button class="btn btn-secondary" id="stopBtn" onclick="stopStreaming()" disabled>Stop Streaming</button>
         </div>
         
         <div class="stats">
@@ -319,50 +166,28 @@ class WebRTCVideoViewer:
                 this.fps = 0;
                 this.latency = 0;
                 
-                this.setupCanvas();
-                this.updateConnectionStatus('disconnected');
-            }
-            
-            setupCanvas() {
-                const resizeCanvas = () => {
-                    const container = this.canvas.parentElement;
-                    const containerWidth = container.clientWidth;
-                    const aspectRatio = 4/3;
-                    
-                    if (containerWidth < 640) {
-                        this.canvas.style.width = containerWidth + 'px';
-                        this.canvas.style.height = (containerWidth / aspectRatio) + 'px';
-                    } else {
-                        this.canvas.style.width = '640px';
-                        this.canvas.style.height = '480px';
-                    }
-                };
-                
-                window.addEventListener('resize', resizeCanvas);
-                resizeCanvas();
+                this.updateStatus('Disconnected');
             }
             
             async startStreaming() {
                 if (this.isStreaming) return;
                 
                 this.isStreaming = true;
-                this.updateConnectionStatus('connecting');
+                this.updateStatus('Connecting...');
                 this.updateButtons(true);
                 
                 this.streamInterval = setInterval(() => {
                     this.streamFrame();
-                }, 33); // ~30 FPS
+                }, 33);
                 
-                this.updateConnectionStatus('connected');
+                this.updateStatus('Connected - Streaming');
             }
             
             async streamFrame() {
                 const startTime = performance.now();
                 
                 try {
-                    const response = await fetch('/frame?' + Date.now(), {
-                        cache: 'no-cache'
-                    });
+                    const response = await fetch('/frame?' + Date.now(), { cache: 'no-cache' });
                     
                     if (response.ok) {
                         const blob = await response.blob();
@@ -403,7 +228,7 @@ class WebRTCVideoViewer:
                 if (!this.isStreaming) return;
                 
                 this.isStreaming = false;
-                this.updateConnectionStatus('disconnected');
+                this.updateStatus('Disconnected');
                 this.updateButtons(false);
                 
                 if (this.streamInterval) {
@@ -419,22 +244,8 @@ class WebRTCVideoViewer:
                 document.getElementById('stopBtn').disabled = !streaming;
             }
             
-            updateConnectionStatus(status) {
-                const statusElement = document.getElementById('connectionStatus');
-                statusElement.className = 'connection-status ' + status;
-                
-                const statusText = document.getElementById('statusText');
-                switch (status) {
-                    case 'connected':
-                        statusText.textContent = 'Connected - Streaming';
-                        break;
-                    case 'connecting':
-                        statusText.textContent = 'Connecting...';
-                        break;
-                    case 'disconnected':
-                        statusText.textContent = 'Disconnected';
-                        break;
-                }
+            updateStatus(message) {
+                document.getElementById('statusText').textContent = message;
             }
         }
         
@@ -448,7 +259,6 @@ class WebRTCVideoViewer:
             streamer.stopStreaming();
         }
         
-        // Auto-start streaming after page load
         window.addEventListener('load', () => {
             setTimeout(() => {
                 streamer.startStreaming();
@@ -456,8 +266,7 @@ class WebRTCVideoViewer:
         });
     </script>
 </body>
-</html>
-        """
+</html>"""
         
     async def run(self):
         """Run the web server"""
