@@ -101,53 +101,16 @@ class WebRTCVideoViewer:
     def get_html_content(self) -> str:
         """Generate the HTML content for the viewer"""
         return """<!DOCTYPE html>
-<html>
-<head><title>YOLO Stream</title></head>
-<body>
-<h1>YOLO Video Stream</h1>
-<canvas id="canvas" width="640" height="480" style="border:1px solid black;"></canvas>
-<br>
-<button onclick="start()">Start</button>
-<button onclick="stop()">Stop</button>
+<html><head><title>YOLO</title></head>
+<body><h1>YOLO Stream</h1>
+<canvas id="c" width="640" height="480" style="border:1px solid black;"></canvas>
+<br><button onclick="s()">Start</button><button onclick="t()">Stop</button>
 <script>
-let canvas = document.getElementById('canvas');
-let ctx = canvas.getContext('2d');
-let interval = null;
-
-function start() {
-    if (interval) return;
-    interval = setInterval(async () => {
-        try {
-            let response = await fetch('/frame');
-            if (response.ok) {
-                let blob = await response.blob();
-                let url = URL.createObjectURL(blob);
-                let img = new Image();
-                img.onload = () => {
-                    ctx.clearRect(0, 0, 640, 480);
-                    ctx.drawImage(img, 0, 0, 640, 480);
-                    URL.revokeObjectURL(url);
-                };
-                img.src = url;
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }, 100);
-}
-
-function stop() {
-    if (interval) {
-        clearInterval(interval);
-        interval = null;
-        ctx.clearRect(0, 0, 640, 480);
-    }
-}
-
-start();
-</script>
-</body>
-</html>"""
+let c=document.getElementById('c'),x=c.getContext('2d'),i=null;
+function s(){if(i)return;i=setInterval(async()=>{try{let r=await fetch('/frame');if(r.ok){let b=await r.blob(),u=URL.createObjectURL(b),m=new Image();m.onload=()=>{x.clearRect(0,0,640,480);x.drawImage(m,0,0,640,480);URL.revokeObjectURL(u);};m.src=u;}}catch(e){console.error(e);}},100);}
+function t(){if(i){clearInterval(i);i=null;x.clearRect(0,0,640,480);}}
+s();
+</script></body></html>"""
         
     async def run(self):
         """Run the web server"""
