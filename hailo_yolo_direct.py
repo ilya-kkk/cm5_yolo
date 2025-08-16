@@ -15,12 +15,14 @@ sys.path = list(set(sys.path))
 
 print("Python path after modification:", sys.path)
 
+# Now import cv2 after fixing the path
 try:
     import cv2
     print("✅ OpenCV imported successfully")
     print("OpenCV version:", cv2.__version__)
 except ImportError as e:
     print(f"❌ Failed to import OpenCV: {e}")
+    print("Available paths:", sys.path)
     sys.exit(1)
 
 import numpy as np
