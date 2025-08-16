@@ -15,7 +15,7 @@ services:
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
-    command: ["python3", "/workspace/hailo_yolo_direct.py"]
+    command: ["sh", "-c", "export PYTHONPATH=/workspace:/usr/lib/python3/dist-packages:/usr/local/lib/python3.10/dist-packages && python3 /workspace/hailo_yolo_direct.py"]
     privileged: true  # Required for camera access
 
   web-stream-service:
