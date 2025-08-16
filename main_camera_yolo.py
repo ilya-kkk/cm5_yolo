@@ -122,61 +122,30 @@ class HailoYOLOProcessor:
             print(f"❌ Error setting up UDP receiver: {e}")
             return False
     
-    def parse_h264_stream(self, data):
-        """Parse H.264 stream and extract NAL units"""
-        nal_units = []
-        start_codes = [b'\x00\x00\x01', b'\x00\x00\x00\x01']
-        
-        # Find all start codes
-        positions = []
-        for start_code in start_codes:
-            pos = 0
-            while True:
-                pos = data.find(start_code, pos)
-                if pos == -1:
-                    break
-                positions.append(pos)
-                pos += 1
-        
-        positions.sort()
-        
-        # Extract NAL units
-        for i, pos in enumerate(positions):
-            if i + 1 < len(positions):
-                end_pos = positions[i + 1]
-                nal_unit = data[pos:end_pos]
-            else:
-                nal_unit = data[pos:]
-            
-            if len(nal_unit) > 4:  # Minimum NAL unit size
-                nal_units.append(nal_unit)
-        
-        return nal_units
-    
-    def decode_h264_with_ffmpeg_robust(self, h264_data):
-        """Robust H.264 decoding using ffmpeg with proper stream handling"""
+    def decode_h264_with_gstreamer(self, h264_data):
+        """Decode H.264 using GStreamer (more robust than FFmpeg for raw streams)"""
         try:
             # Write H.264 data to temporary file
             with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as temp_file:
                 temp_file.write(h264_data)
                 temp_file_path = temp_file.name
             
-            # Use ffmpeg to decode H.264 to JPEG with better parameters
+            # Use GStreamer to decode H.264 to JPEG
             jpeg_output_path = temp_file_path + '.jpg'
             
-            # More robust ffmpeg command
-            cmd = [
-                'ffmpeg', '-y',  # Overwrite output files
-                '-f', 'h264',    # Input format
-                '-i', temp_file_path,  # Input file
-                '-vframes', '1',       # Extract only 1 frame
-                '-q:v', '2',           # High quality
-                '-pix_fmt', 'yuv420p', # Standard pixel format
-                jpeg_output_path        # Output file
-            ]
+            # GStreamer pipeline for H.264 decoding
+            pipeline = f"""
+            filesrc location={temp_file_path} ! 
+            h264parse ! 
+            avdec_h264 ! 
+            videoconvert ! 
+            jpegenc ! 
+            multifilesink location={jpeg_output_path}
+            """
             
-            # Run ffmpeg with longer timeout for complex streams
-            result = subprocess.run(cmd, capture_output=True, timeout=5)
+            # Run GStreamer
+            cmd = ['gst-launch-1.0', '-q', pipeline]
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
             
             if result.returncode == 0 and os.path.exists(jpeg_output_path):
                 # Read the JPEG frame
@@ -201,7 +170,7 @@ class HailoYOLOProcessor:
                 pass
                 
         except Exception as e:
-            print(f"⚠️ FFmpeg H.264 decode error: {e}")
+            print(f"⚠️ GStreamer H.264 decode error: {e}")
             # Clean up temp files on error
             try:
                 if 'temp_file_path' in locals():
@@ -370,6 +339,7 @@ class HailoYOLOProcessor:
         """Process incoming H.264 stream and extract frames"""
         print("📹 Starting H.264 stream processing...")
         print("⏳ Waiting for libcamera-vid stream from host...")
+        print("🔧 Using GStreamer for H.264 decoding")
         
         while self.running:
             try:
@@ -381,11 +351,11 @@ class HailoYOLOProcessor:
                     self.h264_buffer += data
                     
                     # Try to decode frame when we have enough data
-                    if len(self.h264_buffer) > 10000:  # Increased minimum size
-                        print(f"📦 Received {len(self.h264_buffer)} bytes, attempting decode...")
+                    if len(self.h264_buffer) > 15000:  # Increased minimum size for GStreamer
+                        print(f"📦 Received {len(self.h264_buffer)} bytes, attempting GStreamer decode...")
                         
-                        # Try to decode with current buffer
-                        frame = self.decode_h264_with_ffmpeg_robust(self.h264_buffer)
+                        # Try to decode with GStreamer
+                        frame = self.decode_h264_with_gstreamer(self.h264_buffer)
                         
                         if frame is not None:
                             print(f"✅ Decoded frame: {frame.shape} from {len(self.h264_buffer)} bytes")
@@ -427,6 +397,7 @@ class HailoYOLOProcessor:
         print("🎯 Starting Hailo YOLO Processor...")
         print("📋 This service listens for UDP stream from libcamera-vid on the host")
         print("🤖 Real YOLO processing with Hailo-8L")
+        print("🔧 Using GStreamer for robust H.264 decoding")
         
         # Setup UDP receiver
         if not self.setup_udp_receiver():
