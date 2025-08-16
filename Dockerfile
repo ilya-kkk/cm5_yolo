@@ -5,10 +5,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# Set working directory
-WORKDIR /workspace
-
-# Install basic system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -21,7 +18,11 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
