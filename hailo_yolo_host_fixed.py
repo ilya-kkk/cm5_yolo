@@ -100,12 +100,12 @@ class HailoYOLOHost:
             output_streams = self.hef.get_output_vstream_infos()
             
             # Configure input stream
-            input_params = InputVStreamParams()
+            input_params = pyhailort.VStreamParams()
             input_params.data_type = pyhailort.FormatType.UINT8
             input_params.format_order = pyhailort.FormatOrder.NHWC
             
             # Configure output stream
-            output_params = OutputVStreamParams()
+            output_params = pyhailort.VStreamParams()
             output_params.data_type = pyhailort.FormatType.FLOAT32
             output_params.format_order = pyhailort.FormatOrder.NHWC
             
