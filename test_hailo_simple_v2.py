@@ -96,11 +96,19 @@ def test_simple_configure():
         
         # Try to configure with empty dict
         print("  Trying empty dict configuration...")
-        configured_model = vdevice.configure(hef, {})
+        configured_models = vdevice.configure(hef, {})
         print("✅ Configuration successful with empty dict")
         
+        # Handle the list of configured models
+        if isinstance(configured_models, list) and len(configured_models) > 0:
+            configured_model = configured_models[0]
+            print(f"✅ Got {len(configured_models)} configured model(s)")
+        else:
+            configured_model = configured_models
+            
         # Cleanup
-        configured_model.release()
+        if hasattr(configured_model, 'release'):
+            configured_model.release()
         vdevice.release()
         
         return True
@@ -131,11 +139,19 @@ def test_configure_params():
             try:
                 print(f"  Trying interface: {interface}")
                 configure_params = pyhailort.ConfigureParams.create_from_hef(hef, interface)
-                configured_model = vdevice.configure(hef, configure_params)
+                configured_models = vdevice.configure(hef, configure_params)
                 print(f"✅ Configuration successful with {interface}")
                 
+                # Handle the list of configured models
+                if isinstance(configured_models, list) and len(configured_models) > 0:
+                    configured_model = configured_models[0]
+                    print(f"✅ Got {len(configured_models)} configured model(s)")
+                else:
+                    configured_model = configured_models
+                
                 # Cleanup
-                configured_model.release()
+                if hasattr(configured_model, 'release'):
+                    configured_model.release()
                 break
                 
             except Exception as e:
