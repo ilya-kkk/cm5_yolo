@@ -52,7 +52,7 @@ class HailoYOLOHost:
             print("✅ HEF loaded successfully")
             
             # Get network groups
-            network_groups = self.hef.get_network_groups()
+            network_groups = self.hef.get_network_group_names()
             print(f"📋 Network groups: {network_groups}")
             
             # Get input/output streams
@@ -200,9 +200,9 @@ class HailoYOLOHost:
         if self.output_vstream:
             self.output_vstream.close()
         if self.configured_model:
-            self.configured_model.close()
+            self.configured_model.release()
         if self.vdevice:
-            self.vdevice.close()
+            self.vdevice.release()
         
         print("🛑 Hailo YOLO stopped")
 
