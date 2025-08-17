@@ -86,7 +86,14 @@ class HailoYOLOHost:
             
             # Configure network group with default parameters (empty dict)
             # This avoids the max_desc_page_size issue
-            self.configured_model = self.vdevice.configure(self.hef, {})
+            configured_models = self.vdevice.configure(self.hef, {})
+            
+            # Handle the list of configured models
+            if isinstance(configured_models, list) and len(configured_models) > 0:
+                self.configured_model = configured_models[0]
+                print(f"✅ Got {len(configured_models)} configured model(s)")
+            else:
+                self.configured_model = configured_models
             
             # Get input/output stream info
             input_streams = self.hef.get_input_vstream_infos()
