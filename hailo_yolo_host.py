@@ -84,11 +84,9 @@ class HailoYOLOHost:
         try:
             print(f"⚙️ Configuring model: {network_group_name}")
             
-            # Create configure params from HEF with INTEGRATED interface
-            configure_params = pyhailort.ConfigureParams.create_from_hef(self.hef, pyhailort.HailoStreamInterface.INTEGRATED)
-            
-            # Configure network group with proper parameters
-            self.configured_model = self.vdevice.configure(self.hef, configure_params)
+            # Configure network group with default parameters (empty dict)
+            # This avoids the max_desc_page_size issue
+            self.configured_model = self.vdevice.configure(self.hef, {})
             
             # Get input/output stream info
             input_streams = self.hef.get_input_vstream_infos()
