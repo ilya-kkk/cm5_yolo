@@ -16,8 +16,23 @@ services:
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
-    command: ["python3", "/workspace/test_hailo_simple.py"]
+    command: ["python3", "/workspace/hailo_yolo_main.py"]
     privileged: true  # Required for camera access
+
+  hailo-test:
+    build: .
+    container_name: hailo_yolo_test
+    volumes:
+      - .:/workspace
+      - /home/cm5/yolo_models:/home/cm5/yolo_models  # Access to YOLO models
+      - /usr/lib/python3/dist-packages:/usr/lib/python3/dist-packages:ro  # Access to system Hailo packages
+      - /usr/local/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:ro  # Access to system Hailo packages
+    environment:
+      - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/workspace
+    working_dir: /workspace
+    restart: "no"
+    command: ["python3", "/workspace/test_hailo_basic.py"]
+    privileged: true  # Required for device access
 
   web-stream-service:
     build: .

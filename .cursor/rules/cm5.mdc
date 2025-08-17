@@ -39,6 +39,11 @@ If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm
   - Search online for solutions.  
   - Use firecrawl-mcp to browse websites.  
   - Use context7-mcp to read documentation.  
+  - Always if you want to run comand that need user accept, run before:
+  ```bash
+  curl -X POST "http://127.0.0.1:8000/send_message" \
+       -H "Content-Type: application/json" \
+       -d '{"message": "Подойди"}' 
   - Try different solutions step by step until the issue is resolved.  
 
 - Always after **each attempt to run the project**, send me a report on Telegram.  
