@@ -84,8 +84,8 @@ class HailoYOLOHost:
         try:
             print(f"⚙️ Configuring model: {network_group_name}")
             
-            # Configure network group
-            self.configured_model = self.vdevice.configure(self.hef, [network_group_name])
+            # Configure network group with default parameters
+            self.configured_model = self.vdevice.configure(self.hef, {})
             
             # Get input/output stream info
             input_streams = self.hef.get_input_vstream_infos()
