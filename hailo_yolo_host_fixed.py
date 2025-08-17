@@ -110,8 +110,12 @@ class HailoYOLOHost:
             output_params.format_order = pyhailort.FormatOrder.NHWC
             
             # Create streams using the correct API methods
-            self.input_vstream = self.configured_model._create_input_vstreams(input_params)
-            self.output_vstream = self.configured_model._create_output_vstreams(output_params)
+            # The API expects a dict with stream names as keys and parameters as values
+            input_stream_name = input_streams[0].name
+            output_stream_name = output_streams[0].name
+            
+            self.input_vstream = self.configured_model._create_input_vstreams({input_stream_name: input_params})
+            self.output_vstream = self.configured_model._create_output_vstreams({output_stream_name: output_params})
             
             print("✅ Model configured successfully")
             return True
