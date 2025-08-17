@@ -1,5 +1,6 @@
 # Use Python 3.10 full image with NumPy pre-installed
-FROM python:3.10
+# Updated for Hailo-8L support
+FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -35,14 +36,16 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /workspace
 
-# Copy requirements and install Python dependencies
+# Copy requirements first for better caching
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy source code
 COPY . .
 
-# Make scripts executable
+# Make Python files executable
 RUN chmod +x *.py
 
 # Expose ports

@@ -217,11 +217,10 @@ class HailoYOLOProcessor:
         """Setup UDP receiver for MJPEG stream"""
         try:
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.udp_socket.bind(('127.0.0.1', 5000))
+            self.udp_socket.bind(('127.0.0.1', 5001))
             self.udp_socket.settimeout(1.0)
-            print("✅ UDP receiver setup on port 5000")
-            print("📝 Note: libcamera-vid must be started manually on the host")
-            print("📝 Command: libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
+            print("✅ UDP receiver setup on port 5001")
+            print("📝 Command: libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5001")
             return True
         except Exception as e:
             print(f"❌ UDP setup error: {e}")
@@ -314,13 +313,11 @@ class HailoYOLOProcessor:
         stream_thread.daemon = True
         stream_thread.start()
         
-        print("✅ Hailo YOLO Processor is running")
-        print("📱 Video stream available at UDP://127.0.0.1:5000")
-        print("🌐 Web interface available at http://localhost:8080")
-        print("💾 Processed frames saved to /tmp/latest_yolo_frame.jpg")
-        print()
-        print("🔧 To start video stream, run on the host:")
-        print("   libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5000")
+        print("🎯 Hailo YOLO Service Started")
+        print("📱 Video stream available at UDP://127.0.0.1:5001")
+        print("📋 To start camera stream, run on host:")
+        print("   libcamera-vid -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 --inline -o udp://127.0.0.1:5001")
+        print("🔧 Press Ctrl+C to stop")
         
         # Keep main thread alive
         try:

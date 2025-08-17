@@ -19,22 +19,49 @@ When analyzing hardware, check `/boot/firmware/config.txt` and the system for th
 
 If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm the target hardware.
 
-## Command Execution Rules
-- Always run commands on the CM5 via SSH.
-- Always execute code inside a **Docker Compose** environment.
-- Use the format:
-  ```bash
-  ssh cm5 'docker compose run <SERVICE> <COMMAND>'
-
 ## Code changes Workflow
 - Always after every code change, you must run the following commands:
   ```bash
-  git add . && git commit -m '<NAME>' && git push && curl -X POST "http://127.0.0.1:8000/send_message" -H "Content-Type: application/json" -d '{"message": "<INFO>"}'&& ssh cm5 'cd cm5_yolo && git fetch --all && git reset --hard origin/main'
+  git add . && git commit -m '<NAME>' && git push && curl -X POST "http://127.0.0.1:8000/send_message" \
+       -H "Content-Type: application/json" \
+       -d '{"message": "<INFO>"}' && ssh cm5 'cd cm5_yolo && git fetch --all && git reset --hard origin/main'
 - Replace <NAME> with a short description of the bug fix or feature added in this commit in english language
-- Replace <INFO> with a description of the bug fix or feature added in this commit in russian language
+- Replace <INFO> with a description of the bug fix or feature added in this commit in Russian language
 
-## To verify that the video streaming solution works correctly, execute the following command on the CM5:
-- run on current pc:
+## Rules for changing the Project:
+- Always start by running the project.  
+  - Always run commands on the CM5 via SSH.
+  - Always execute code inside a **Docker Compose** environment.
+  - Use the format:
+    ```bash
+    ssh cm5 'cd cm5_yolo && docker compose run <SERVICE> <COMMAND>'
+- If an error occurs:
+  - Search online for solutions.  
+  - Use firecrawl-mcp to browse websites.  
+  - Use context7-mcp to read documentation.  
+  - Try different solutions step by step until the issue is resolved.  
+
+- Always after **each attempt to run the project**, send me a report on Telegram.  
+  - The report must be written **in Russian**.  
+  - The format of the report should be:
+
+    ```
+    Встретил ошибку: <ERROR_NAME>
+    Попробовал 1: не получилось
+    Попробовал 2: не получилось
+    ...
+    Попробовал N: получилось
+    ```
+
+  - If you find a workaround instead of a direct solution, include it in the report.  
+
+- To send a report, use the command:
+
   ```bash
-  gst-launch-1.0 -v udpsrc port=5000 ! h264parse ! avdec_h264 ! videoconvert ! videoflip method=rotate-180 ! autovideosink
+  curl -X POST "http://127.0.0.1:8000/send_message" \
+       -H "Content-Type: application/json" \
+       -d '{"message": "<INFO>"}'
+- Replace <INFO> with the report text.
 
+
+...

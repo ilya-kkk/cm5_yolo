@@ -34,9 +34,14 @@ import subprocess
 import json
 from pathlib import Path
 
-# Hailo imports - temporarily disabled for testing
-HAILO_AVAILABLE = False
-print("⚠️ Hailo platform temporarily disabled for testing")
+# Hailo imports - enabled for Hailo-8L
+try:
+    import hailo_platform
+    HAILO_AVAILABLE = True
+    print("✅ Hailo platform available")
+except ImportError as e:
+    HAILO_AVAILABLE = False
+    print(f"❌ Hailo not available: {e}")
 
 class HailoYOLOProcessor:
     def __init__(self):
@@ -76,253 +81,63 @@ class HailoYOLOProcessor:
             print("🔧 Initializing Hailo YOLO...")
             
             if not HAILO_AVAILABLE:
-                print("⚠️ Hailo platform not available - running in test mode")
+                print("⚠️ Hailo not available - running in test mode")
                 return
             
-            # Try to get Hailo device directly using Python API
+            # Initialize Hailo device using hailo_platform
             try:
                 print("🔍 Scanning for Hailo devices...")
-                
-                # Try different device access methods
-                if hasattr(hailo_platform, 'Device'):
-                    print("✅ Device class found, trying to scan...")
-                    try:
-                        # Try to get device info
-                        devices = hailo_platform.Device.scan()
-                        if devices:
-                            self.hailo_device = devices[0]
-                            print(f"✅ Found Hailo device: {self.hailo_device}")
-                        else:
-                            print("⚠️ No devices found via Device.scan()")
-                    except Exception as e:
-                        print(f"⚠️ Device.scan() error: {e}")
-                
-                # Try alternative method - use pyhailort directly
-                if not self.hailo_device:
-                    print("🔍 Trying pyhailort direct access...")
-                    try:
-                        import hailo_platform.pyhailort as pyhailort
-                        print("✅ pyhailort imported directly")
-                        
-                        # Try to create device using pyhailort
-                        if hasattr(pyhailort, 'Device'):
-                            try:
-                                self.hailo_device = pyhailort.Device()
-                                print(f"✅ Created pyhailort Device: {self.hailo_device}")
-                            except Exception as e:
-                                print(f"⚠️ pyhailort Device creation error: {e}")
-                        
-                        # Try VDevice
-                        if not self.hailo_device and hasattr(pyhailort, 'VDevice'):
-                            try:
-                                self.hailo_device = pyhailort.VDevice()
-                                print(f"✅ Created pyhailort VDevice: {self.hailo_device}")
-                            except Exception as e:
-                                print(f"⚠️ pyhailort VDevice creation error: {e}")
-                                
-                    except Exception as e:
-                        print(f"⚠️ pyhailort direct access error: {e}")
-                
-                # Try alternative method - direct PCIe access
-                if not self.hailo_device:
-                    print("🔍 Trying direct PCIe access...")
-                    try:
-                        # Try to access Hailo device directly through PCIe
-                        if hasattr(hailo_platform, 'PcieDevice'):
-                            try:
-                                # Try to create device with specific parameters
-                                self.hailo_device = hailo_platform.PcieDevice()
-                                print(f"✅ Created PcieDevice: {self.hailo_device}")
-                            except Exception as e:
-                                print(f"⚠️ PcieDevice creation error: {e}")
-                                
-                        # Try alternative - use Device with specific parameters
-                        if not self.hailo_device and hasattr(hailo_platform, 'Device'):
-                            try:
-                                # Try to create device with specific device ID
-                                device_id = "0001:01:00.0"  # From lspci output
-                                self.hailo_device = hailo_platform.Device(device_id)
-                                print(f"✅ Created Device with ID {device_id}: {self.hailo_device}")
-                            except Exception as e:
-                                print(f"⚠️ Device with ID creation error: {e}")
-                                
-                    except Exception as e:
-                        print(f"⚠️ Direct PCIe access error: {e}")
-                
-                # Try alternative method - mmap direct access
-                if not self.hailo_device:
-                    print("🔍 Trying mmap direct PCIe access...")
-                    try:
-                        # Try to access Hailo device directly through mmap
-                        import mmap
-                        import os
-                        
-                        # Try to open PCIe device directly
-                        pcie_path = "/sys/bus/pci/devices/0001:01:00.0/resource0"
-                        if os.path.exists(pcie_path):
-                            print(f"✅ PCIe resource found: {pcie_path}")
-                            try:
-                                # Try to create a simple device object
-                                class DirectHailoDevice:
-                                    def __init__(self, path):
-                                        self.path = path
-                                        self.name = "Direct PCIe Hailo Device"
-                                    
-                                    def __str__(self):
-                                        return f"DirectHailoDevice({self.path})"
-                                
-                                self.hailo_device = DirectHailoDevice(pcie_path)
-                                print(f"✅ Created DirectHailoDevice: {self.hailo_device}")
-                                
-                                # Mark as loaded for testing
-                                self.model_loaded = True
-                                print("✅ Direct Hailo device loaded successfully")
-                                
-                            except Exception as e:
-                                print(f"⚠️ DirectHailoDevice creation error: {e}")
-                        else:
-                            print(f"⚠️ PCIe resource not found: {pcie_path}")
-                            
-                    except Exception as e:
-                        print(f"⚠️ mmap direct access error: {e}")
-                
-                # Try alternative method - raw PCIe access without firmware
-                if not self.hailo_device:
-                    print("🔍 Trying raw PCIe access without firmware...")
-                    try:
-                        # Try to access Hailo device directly through raw PCIe
-                        import os
-                        import struct
-                        
-                        # Try to access PCIe config space
-                        config_path = "/sys/bus/pci/devices/0001:01:00.0/config"
-                        if os.path.exists(config_path):
-                            print(f"✅ PCIe config found: {config_path}")
-                            try:
-                                # Try to read PCIe configuration
-                                with open(config_path, 'rb') as f:
-                                    f.seek(0)
-                                    config_data = f.read(256)  # Read PCIe config space
-                                    
-                                    if config_data:
-                                        print(f"✅ Successfully read {len(config_data)} bytes from PCIe config")
-                                        
-                                        # Try to create device object
-                                        class RawHailoDevice:
-                                            def __init__(self, config_path, resource_path):
-                                                self.config_path = config_path
-                                                self.resource_path = resource_path
-                                                self.name = "Raw PCIe Hailo Device"
-                                            
-                                            def __str__(self):
-                                                return f"RawHailoDevice({self.resource_path})"
-                                        
-                                        resource_path = "/sys/bus/pci/devices/0001:01:00.0/resource0"
-                                        self.hailo_device = RawHailoDevice(config_path, resource_path)
-                                        print(f"✅ Created RawHailoDevice: {self.hailo_device}")
-                                        
-                                        # Mark as loaded for testing
-                                        self.model_loaded = True
-                                        print("✅ Raw Hailo device loaded successfully")
-                                        
-                                    else:
-                                        print("⚠️ Failed to read PCIe config")
-                                        
-                            except Exception as e:
-                                print(f"⚠️ PCIe config access error: {e}")
-                        else:
-                            print(f"⚠️ PCIe config not found: {config_path}")
-                            
-                    except Exception as e:
-                        print(f"⚠️ Raw PCIe access error: {e}")
-                
-                # Try alternative method - debug mode Hailo access
-                if not self.hailo_device:
-                    print("🔍 Trying debug mode Hailo access...")
-                    try:
-                        # Try to access Hailo device in debug mode
-                        import os
-                        
-                        # Try to access Hailo device through debug interface
-                        debug_path = "/sys/kernel/debug/hailo"
-                        if os.path.exists(debug_path):
-                            print(f"✅ Hailo debug interface found: {debug_path}")
-                            try:
-                                # Try to create debug device object
-                                class DebugHailoDevice:
-                                    def __init__(self, debug_path):
-                                        self.debug_path = debug_path
-                                        self.name = "Debug Hailo Device"
-                                    
-                                    def __str__(self):
-                                        return f"DebugHailoDevice({self.debug_path})"
-                                
-                                self.hailo_device = DebugHailoDevice(debug_path)
-                                print(f"✅ Created DebugHailoDevice: {self.hailo_device}")
-                                
-                                # Mark as loaded for testing
-                                self.model_loaded = True
-                                print("✅ Debug Hailo device loaded successfully")
-                                
-                            except Exception as e:
-                                print(f"⚠️ DebugHailoDevice creation error: {e}")
-                        else:
-                            print(f"⚠️ Hailo debug interface not found: {debug_path}")
-                            
-                    except Exception as e:
-                        print(f"⚠️ Debug mode access error: {e}")
-                
-                # Try alternative method
-                if not self.hailo_device:
-                    print("🔍 Trying alternative device access...")
-                    try:
-                        # Try to create device directly using VDevice
-                        if hasattr(hailo_platform, 'VDevice'):
-                            self.hailo_device = hailo_platform.VDevice()
-                            print(f"✅ Created VDevice: {self.hailo_device}")
-                        elif hasattr(hailo_platform, 'PcieDevice'):
-                            self.hailo_device = hailo_platform.PcieDevice()
-                            print(f"✅ Created PcieDevice: {self.hailo_device}")
-                    except Exception as e:
-                        print(f"⚠️ Device creation error: {e}")
-                
-                # Try to load YOLO model
-                if self.hailo_device:
-                    try:
-                        # Look for HEF file
-                        hef_path = self.find_hef_file()
-                        if hef_path:
-                            print(f"🎯 Loading HEF model: {hef_path}")
-                            try:
-                                # Try to load HEF
-                                if hasattr(hailo_platform, 'HEF'):
-                                    self.yolo_model = hailo_platform.HEF(hef_path)
-                                    print(f"✅ HEF loaded: {self.yolo_model}")
-                                    
-                                    # Try to configure network
-                                    if hasattr(hailo_platform, 'ConfiguredNetwork'):
-                                        self.model_loaded = True
-                                        print("✅ Hailo YOLO model loaded successfully")
-                                    else:
-                                        print("⚠️ ConfiguredNetwork class not found")
-                                else:
-                                    print("⚠️ HEF class not found")
-                            except Exception as e:
-                                print(f"⚠️ Error loading HEF: {e}")
-                        else:
-                            print("⚠️ No HEF file found")
-                    except Exception as e:
-                        print(f"⚠️ Error loading Hailo model: {e}")
-                
-                if not self.model_loaded:
-                    print("⚠️ Hailo model not loaded, will use OpenCV fallback")
-                    
+                devices = hailo_platform.Device.scan()
+                if devices:
+                    self.hailo_device = devices[0]
+                    print(f"✅ Found Hailo device: {self.hailo_device}")
+                else:
+                    print("❌ No Hailo devices found")
+                    return
             except Exception as e:
-                print(f"⚠️ Error accessing Hailo device: {e}")
+                print(f"❌ Failed to scan Hailo devices: {e}")
+                return
+            
+            # Load YOLOv8n model
+            try:
+                print("📦 Loading YOLOv8n model...")
+                hef_path = self.find_hef_file()
+                
+                if not hef_path:
+                    print("❌ No valid HEF file found")
+                    return
+                
+                # Load HEF file using hailo_platform
+                self.yolo_model = hailo_platform.HEF(hef_path)
+                print(f"✅ YOLOv8n model loaded: {self.yolo_model}")
+                
+                # Configure model for inference
+                self.configure_model = self.yolo_model.configure(self.hailo_device)
+                print(f"✅ Model configured for device: {self.configure_model}")
+                
+                # Create input and output VStreams
+                self.input_vstream_info = self.configure_model.get_input_vstream_infos()
+                self.output_vstream_info = self.configure_model.get_output_vstream_infos()
+                
+                print(f"📥 Input streams: {len(self.input_vstream_info)}")
+                print(f"📤 Output streams: {len(self.output_vstream_info)}")
+                
+                for i, info in enumerate(self.input_vstream_info):
+                    print(f"  Input {i}: {info.shape}, {info.format}")
+                
+                for i, info in enumerate(self.output_vstream_info):
+                    print(f"  Output {i}: {info.shape}, {info.format}")
+                
+                self.model_loaded = True
+                print("🎯 YOLOv8n model ready for inference!")
+                
+            except Exception as e:
+                print(f"❌ Failed to load YOLOv8n model: {e}")
+                return
                 
         except Exception as e:
-            print(f"⚠️ Hailo initialization error: {e}")
-            print("🔄 Continuing with OpenCV fallback...")
+            print(f"❌ Hailo initialization failed: {e}")
+            return
     
     def find_hef_file(self):
         """Find HEF model file"""
@@ -354,102 +169,154 @@ class HailoYOLOProcessor:
             
             print("🚀 Running Hailo YOLO inference...")
             
-            # Try to access Hailo device directly for real inference
+            # Preprocess frame for YOLOv8n (640x640)
+            input_height, input_width = 640, 640
+            frame_height, frame_width = frame.shape[:2]
+            
+            # Resize and normalize frame
+            resized_frame = cv2.resize(frame, (input_width, input_height))
+            input_data = resized_frame.astype(np.float32) / 255.0
+            
+            # Convert to NCHW format (batch, channels, height, width)
+            input_data = np.transpose(input_data, (2, 0, 1))
+            input_data = np.expand_dims(input_data, axis=0)
+            
             try:
-                # If we have a DirectHailoDevice, try to access PCIe directly
-                if hasattr(self.hailo_device, 'path') and 'DirectHailoDevice' in str(self.hailo_device):
-                    print("🔧 Attempting direct PCIe access to Hailo...")
-                    
-                    # Try to access Hailo device directly through PCIe
-                    import mmap
-                    import os
-                    
-                    pcie_path = self.hailo_device.path
-                    if os.path.exists(pcie_path):
-                        try:
-                            # Try to open PCIe device directly
-                            with open(pcie_path, 'rb') as f:
-                                # Try to read some data from Hailo device
-                                f.seek(0)
-                                header_data = f.read(64)  # Read first 64 bytes
-                                
-                                if header_data:
-                                    print(f"✅ Successfully read {len(header_data)} bytes from Hailo device")
-                                    
-                                    # Try to create a simple inference result based on device data
-                                    # This is a real attempt to use the Hailo chip
-                                    processed_frame = frame.copy()
-                                    
-                                    # Add real Hailo status
-                                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                                    cv2.putText(processed_frame, f"Time: {timestamp}", (10, 30), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                                    cv2.putText(processed_frame, f"FPS: {self.current_fps:.1f}", (10, 60), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                                    cv2.putText(processed_frame, "YOLO Processing Active (Real Hailo-8L)", (10, 90), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
-                                    cv2.putText(processed_frame, f"Frame: {self.frame_counter}", (10, 120), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                                    
-                                    # Generate real detections based on Hailo device data
-                                    # Use the actual device data to influence detections
-                                    device_hash = hash(header_data) % 1000
-                                    frame_offset = (self.frame_counter + device_hash) % 120 / 120.0
-                                    
-                                    height, width = frame.shape[:2]
-                                    
-                                    # Create detections based on actual device state
-                                    detections = []
-                                    
-                                    # Detection based on device data
-                                    x1 = int(width * 0.1 + width * 0.5 * frame_offset)
-                                    y1 = int(height * 0.2 + height * 0.4 * np.sin(frame_offset * 2 * np.pi))
-                                    x2 = x1 + int(width * 0.25)
-                                    y2 = y1 + int(height * 0.35)
-                                    
-                                    detections.append({
-                                        'bbox': (x1, y1, x2, y2),
-                                        'class': 'Person',
-                                        'confidence': 0.85 + 0.1 * np.sin(frame_offset * 4 * np.pi),
-                                        'color': (0, 255, 0)
-                                    })
-                                    
-                                    # Draw detections
-                                    for detection in detections:
-                                        x1, y1, x2, y2 = detection['bbox']
-                                        class_name = detection['class']
-                                        confidence = detection['confidence']
-                                        color = detection['color']
-                                        
-                                        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 2)
-                                        label = f"{class_name}: {confidence:.2f}"
-                                        cv2.putText(processed_frame, label, (x1, y1 - 10), 
-                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-                                    
-                                    cv2.putText(processed_frame, f"Real Hailo Detections: {len(detections)}", (10, 150), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                                    cv2.putText(processed_frame, f"Device Hash: {device_hash}", (10, 180), 
-                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                                    
-                                    return processed_frame
-                                else:
-                                    print("⚠️ Failed to read data from Hailo device")
-                                    
-                        except Exception as e:
-                            print(f"⚠️ Direct PCIe access error: {e}")
+                # Create input and output VStreams for inference using hailo_platform
+                input_vstreams = self.configure_model.create_input_vstreams()
+                output_vstreams = self.configure_model.create_output_vstreams()
                 
-                # If direct access failed, try alternative methods
-                print("⚠️ Direct access failed, trying alternative Hailo methods...")
+                # Send input data to Hailo
+                input_vstreams[0].write(input_data)
+                
+                # Get inference results
+                output_data = output_vstreams[0].read()
+                
+                # Process YOLOv8n output
+                detections = self.process_yolov8n_output(output_data, frame_width, frame_height)
+                
+                # Draw detections on frame
+                processed_frame = self.draw_detections(frame, detections)
+                
+                print(f"✅ Hailo inference completed, found {len(detections)} objects")
+                return processed_frame
                 
             except Exception as e:
-                print(f"⚠️ Hailo device access error: {e}")
-            
-            # Fallback to simulation if all else fails
+                print(f"❌ Hailo inference error: {e}")
+                return self.simulate_yolo_detection(frame)
+                
+        except Exception as e:
+            print(f"❌ Hailo inference failed: {e}")
             return self.simulate_yolo_detection(frame)
+    
+    def process_yolov8n_output(self, output_data, frame_width, frame_height):
+        """Process YOLOv8n output to extract detections"""
+        try:
+            # YOLOv8n output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
+            # Reshape output to [8400, 84]
+            output = output_data.reshape(-1, 84)
+            
+            # Extract bounding boxes and class probabilities
+            boxes = output[:, :4]  # x1, y1, x2, y2
+            scores = output[:, 4:]
+            
+            # Get class with highest probability for each detection
+            class_ids = np.argmax(scores, axis=1)
+            confidences = np.max(scores, axis=1)
+            
+            # Filter detections by confidence threshold
+            confidence_threshold = 0.5
+            mask = confidences > confidence_threshold
+            
+            filtered_boxes = boxes[mask]
+            filtered_class_ids = class_ids[mask]
+            filtered_confidences = confidences[mask]
+            
+            # Convert normalized coordinates to pixel coordinates
+            detections = []
+            for i in range(len(filtered_boxes)):
+                x1, y1, x2, y2 = filtered_boxes[i]
+                
+                # Scale to frame dimensions
+                x1 = int(x1 * frame_width)
+                y1 = int(y1 * frame_height)
+                x2 = int(x2 * frame_width)
+                y2 = int(y2 * frame_height)
+                
+                # Get class name
+                class_name = self.get_class_name(filtered_class_ids[i])
+                
+                detections.append({
+                    'bbox': (x1, y1, x2, y2),
+                    'class': class_name,
+                    'confidence': float(filtered_confidences[i]),
+                    'color': self.get_class_color(filtered_class_ids[i])
+                })
+            
+            return detections
             
         except Exception as e:
-            print(f"⚠️ Hailo inference error: {e}")
-            return self.simulate_yolo_detection(frame)
+            print(f"❌ Error processing YOLOv8n output: {e}")
+            return []
+    
+    def get_class_name(self, class_id):
+        """Get COCO class name from class ID"""
+        coco_classes = [
+            'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
+            'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
+            'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
+            'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+            'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+            'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
+            'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
+            'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+            'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+            'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+        ]
+        
+        if 0 <= class_id < len(coco_classes):
+            return coco_classes[class_id]
+        return f"class_{class_id}"
+    
+    def get_class_color(self, class_id):
+        """Get color for class visualization"""
+        colors = [
+            (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255),
+            (0, 255, 255), (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0),
+            (128, 0, 128), (0, 128, 128), (64, 0, 0), (0, 64, 0), (0, 0, 64)
+        ]
+        return colors[class_id % len(colors)]
+    
+    def draw_detections(self, frame, detections):
+        """Draw detections on frame"""
+        processed_frame = frame.copy()
+        
+        # Add timestamp and FPS
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        cv2.putText(processed_frame, f"Time: {timestamp}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(processed_frame, f"FPS: {self.current_fps:.1f}", (10, 60), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(processed_frame, "YOLO Processing Active (Real Hailo-8L)", (10, 90), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+        cv2.putText(processed_frame, f"Frame: {self.frame_counter}", (10, 120), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(processed_frame, f"Detections: {len(detections)}", (10, 150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        # Draw detections
+        for detection in detections:
+            x1, y1, x2, y2 = detection['bbox']
+            class_name = detection['class']
+            confidence = detection['confidence']
+            color = detection['color']
+            
+            cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 2)
+            label = f"{class_name}: {confidence:.2f}"
+            cv2.putText(processed_frame, label, (x1, y1 - 10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        
+        return processed_frame
     
     def simulate_yolo_detection(self, frame):
         """Simulate YOLO detection for fallback"""
