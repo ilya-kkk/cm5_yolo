@@ -84,8 +84,11 @@ class HailoYOLOHost:
         try:
             print(f"⚙️ Configuring model: {network_group_name}")
             
-            # Configure network group with default parameters
-            self.configured_model = self.vdevice.configure(self.hef, {})
+            # Create configure params from HEF with PCIe interface
+            configure_params = pyhailort.ConfigureParams.create_from_hef(self.hef, pyhailort.HailoStreamInterface.PCIe)
+            
+            # Configure network group with proper parameters
+            self.configured_model = self.vdevice.configure(self.hef, configure_params)
             
             # Get input/output stream info
             input_streams = self.hef.get_input_vstream_infos()
