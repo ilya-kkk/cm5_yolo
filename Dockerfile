@@ -16,7 +16,7 @@ ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 RUN apt-get update && apt-get install -y \
     python3.8 \
     python3.8-dev \
-    python3.8-pip \
+    python3-pip \
     python3.8-venv \
     python3.8-distutils \
     libgl1 \
