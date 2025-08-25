@@ -43,6 +43,19 @@ services:
     command: ["python3", "/workspace/test_hailo_basic.py"]
     privileged: true  # Required for device access
 
+  opencv-test:
+    build: .
+    container_name: hailo_yolo_opencv_test
+    volumes:
+      - .:/workspace
+      - /dev:/dev  # Access to camera devices
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace
+    restart: "no"
+    command: ["python3", "/workspace/test_simple_opencv.py"]
+    privileged: true  # Required for camera access
+
   web-stream-service:
     build: .
     container_name: hailo_yolo_web_stream
