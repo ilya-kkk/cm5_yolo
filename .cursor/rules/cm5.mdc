@@ -26,7 +26,7 @@ If `/proc/device-tree/model` contains `"Raspberry Pi Compute Module 5"`, confirm
        -H "Content-Type: application/json" \
        -d '{"message": "<INFO>"}' && ssh cm5 'cd cm5_yolo && git fetch --all && git reset --hard origin/main'
 - Replace <NAME> with a short description of the bug fix or feature added in this commit in english language
-- Replace <INFO> with a description of the bug fix or feature added in this commit in Russian language
+- Replace <INFO> with a description of the bug fix or feature added in this commit in Russian language, dont use /n, use Enter 
 
 ## Rules for changing the Project:
 - Always start by running the project.  

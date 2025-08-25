@@ -3,10 +3,11 @@ FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages
+ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.11/dist-packages
 ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
 ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
+ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
 # Install system dependencies for Hailo and OpenCV
 RUN apt-get update && apt-get install -y \
@@ -33,6 +34,24 @@ RUN apt-get update && apt-get install -y \
     git \
     pciutils \
     udev \
+    libopencv-core406 \
+    libopencv-imgproc406 \
+    libopencv-imgcodecs406 \
+    libopencv-videoio406 \
+    libopencv-highgui406 \
+    libopencv-stitching406 \
+    libopencv-calib3d406 \
+    libopencv-features2d406 \
+    libopencv-objdetect406 \
+    libopencv-video406 \
+    libopencv-dnn406 \
+    libopencv-ml406 \
+    libopencv-flann406 \
+    libopencv-photo406 \
+    libopencv-shape406 \
+    libopencv-superres406 \
+    libopencv-ts406 \
+    libopencv-videostab406 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

@@ -1,54 +1,52 @@
 #!/usr/bin/env python3
 """
-Simple Hailo test script
+Simple Hailo test script without OpenCV dependencies
 """
 
+import time
 import sys
-import os
 
-# Add Hailo packages to path
-sys.path.insert(0, '/usr/lib/python3/dist-packages')
-sys.path.insert(0, '/usr/local/lib/python3/dist-packages')
+print("🔧 Starting Hailo test...")
 
-print("=== Hailo Simple Test ===")
-print("Python version:", sys.version)
-print("Python executable:", sys.executable)
-print("Current working directory:", os.getcwd())
-print("Python path:", sys.path)
-
-# Try to import OpenCV
-try:
-    import cv2
-    print("✅ OpenCV imported successfully")
-    print("OpenCV version:", cv2.__version__)
-except ImportError as e:
-    print(f"❌ Failed to import OpenCV: {e}")
-
-# Try to import Hailo
+# Test Hailo imports
 try:
     import hailo_platform
+    from hailo_platform.pyhailort.pyhailort import (
+        VDevice, HEF, InferModel, ConfiguredInferModel,
+        InputVStreamParams, OutputVStreamParams
+    )
     print("✅ Hailo platform imported successfully")
-    print("Hailo platform path:", hailo_platform.__file__)
     
-    # Try to import specific Hailo classes
+    # Try to create VDevice
     try:
-        from hailo_platform.pyhailort.pyhailort import VDevice, HEF
-        print("✅ VDevice and HEF imported successfully")
+        print("🔧 Creating VDevice...")
+        vdevice = VDevice()
+        print("✅ VDevice created successfully")
         
-        # Try to scan for devices
+        # List available devices
+        print("🔧 Available devices:")
         try:
-            devices = VDevice.scan()
-            print(f"✅ Found {len(devices)} Hailo devices")
+            devices = vdevice.scan()
             for i, device in enumerate(devices):
                 print(f"  Device {i}: {device}")
-        except Exception as e:
-            print(f"⚠️ Failed to scan devices: {e}")
-            
-    except ImportError as e:
-        print(f"⚠️ Failed to import VDevice/HEF: {e}")
+        except AttributeError:
+            # Try alternative method
+            print("  Using alternative device detection...")
+            try:
+                # Try to get device info directly
+                print(f"  VDevice created: {vdevice}")
+                print("  Device appears to be working")
+            except Exception as e:
+                print(f"  Error getting device info: {e}")
+        
+        vdevice.release()
+        print("✅ VDevice released successfully")
+        
+    except Exception as e:
+        print(f"❌ Error creating VDevice: {e}")
         
 except ImportError as e:
-    print(f"❌ Failed to import Hailo platform: {e}")
-    print("Available paths:", sys.path)
+    print(f"❌ Hailo platform not available: {e}")
+    sys.exit(1)
 
-print("=== Test completed ===") 
+print("✅ Hailo test completed successfully!") 

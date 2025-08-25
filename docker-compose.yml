@@ -7,12 +7,21 @@ services:
     volumes:
       - .:/workspace
       - /dev:/dev  # Access to camera devices
+      - /dev/hailo0:/dev/hailo0  # Access to Hailo device
       - /tmp:/tmp  # Access to temp files for frame sharing
       - /home/cm5/yolo_models:/home/cm5/yolo_models  # Access to YOLO models
       - /usr/lib/python3/dist-packages:/usr/lib/python3/dist-packages:ro  # Access to system Hailo packages
       - /usr/local/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:ro  # Access to system Hailo packages
+      - /usr/lib/python3.10/dist-packages:/usr/lib/python3.10/dist-packages:ro  # Access to Python 3.10 system packages
+      - /usr/local/lib/python3.10/site-packages:/usr/local/lib/python3.10/site-packages:ro  # Access to Python 3.10 local packages
+      - /usr/lib/python3.11/dist-packages:/usr/lib/python3.11/dist-packages:ro  # Access to Python 3.11 system packages (Hailo)
+      - /usr/lib/python3:/usr/lib/python3:ro  # Access to system Python packages
+      - /usr/local/lib/python3:/usr/local/lib/python3:ro  # Access to local Python packages
+      - /usr/lib:/usr/lib:ro  # Access to system libraries
+      - /usr/local/lib:/usr/local/lib:ro  # Access to local libraries
     environment:
-      - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/workspace
+      - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/usr/lib/python3.10/dist-packages:/usr/local/lib/python3.10/site-packages:/usr/lib/python3.11/dist-packages:/workspace
+      - LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
     working_dir: /workspace
     network_mode: "host"  # Required to access UDP port 5000
     restart: unless-stopped
@@ -44,4 +53,4 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
-    command: ["python3", "/workspace/web_stream_service.py"] 
+    command: ["python3", "/workspace/web_stream_service_simple.py"] 
