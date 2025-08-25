@@ -28,6 +28,20 @@ services:
     command: ["python3", "/workspace/hailo_yolo_main.py"]
     privileged: true  # Required for camera access
 
+  simple-yolo-processor:
+    build: .
+    container_name: simple_yolo_processor
+    volumes:
+      - .:/workspace
+      - /dev:/dev  # Access to camera devices
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace
+    network_mode: "host"  # Required to access UDP port 5000
+    restart: unless-stopped
+    command: ["python3", "/workspace/simple_yolo_processor.py"]
+    privileged: true  # Required for camera access
+
   hailo-test:
     build: .
     container_name: hailo_yolo_test
