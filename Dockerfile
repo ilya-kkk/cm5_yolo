@@ -1,16 +1,24 @@
-# Use Python 3.9 slim image for GLIBC compatibility with CM5
-FROM python:3.9-slim
+# Use Ubuntu 20.04 with Python 3.8 for maximum GLIBC compatibility with CM5
+FROM ubuntu:20.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/usr/local/lib/python3.9/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.9/dist-packages
+ENV PYTHONPATH=/usr/local/lib/python3.8/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.8/dist-packages
 ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
 ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
 ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
-# Install system dependencies for Hailo and OpenCV
+# Install Python 3.8 and system dependencies
 RUN apt-get update && apt-get install -y \
+    python3.8 \
+    python3.8-dev \
+    python3.8-pip \
+    python3.8-venv \
+    python3.8-distutils \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -34,25 +42,11 @@ RUN apt-get update && apt-get install -y \
     git \
     pciutils \
     udev \
-    libopencv-core406 \
-    libopencv-imgproc406 \
-    libopencv-imgcodecs406 \
-    libopencv-videoio406 \
-    libopencv-highgui406 \
-    libopencv-stitching406 \
-    libopencv-calib3d406 \
-    libopencv-features2d406 \
-    libopencv-objdetect406 \
-    libopencv-video406 \
-    libopencv-dnn406 \
-    libopencv-ml406 \
-    libopencv-flann406 \
-    libopencv-photo406 \
-    libopencv-shape406 \
-    libopencv-superres406 \
-    libopencv-ts406 \
-    libopencv-videostab406 \
     && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for python3
+RUN ln -sf /usr/bin/python3.8 /usr/bin/python3
+RUN ln -sf /usr/bin/python3.8 /usr/bin/python
 
 # Set working directory
 WORKDIR /workspace
@@ -61,7 +55,7 @@ WORKDIR /workspace
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . .
