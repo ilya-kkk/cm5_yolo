@@ -1,5 +1,5 @@
-# Use Ubuntu 22.04 with Python 3.10 for better GLIBC compatibility with Hailo
-FROM ubuntu:22.04
+# Use Python 3.10 base image for better compatibility
+FROM python:3.10-slim
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -12,15 +12,8 @@ ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
 ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
-# Install Python 3.10 and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3.10-dev \
-    python3-pip \
-    python3.10-venv \
-    python3.10-distutils \
-    python3.10-minimal \
-    python3.10-stdlib \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -46,10 +39,6 @@ RUN apt-get update && apt-get install -y \
     udev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create symlink for python3
-RUN ln -sf /usr/bin/python3.10 /usr/bin/python3
-RUN ln -sf /usr/bin/python3.10 /usr/bin/python
-
 # Set working directory
 WORKDIR /workspace
 
@@ -57,7 +46,7 @@ WORKDIR /workspace
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . .
@@ -72,4 +61,4 @@ RUN mkdir -p /usr/lib/python3/dist-packages /usr/local/lib/python3/dist-packages
 EXPOSE 8080
 
 # Default command - will be overridden by docker-compose
-CMD ["python3", "hailo_yolo_main.py"] 
+CMD ["python", "hailo_yolo_main.py"] 
