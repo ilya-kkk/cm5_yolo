@@ -10,7 +10,7 @@ ENV PYTHONPATH=/workspace
 ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
 ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
-ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
+ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib:/usr/local/lib/python3.10/lib
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
