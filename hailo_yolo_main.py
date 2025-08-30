@@ -358,7 +358,9 @@ class HailoYOLOProcessor:
             print(f"❌ Frame processing error: {e}")
             return frame, []
     
-    def start_udp_stream(self, port=5000):
+    def start_udp_stream(self, port=None):
+    if port is None:
+        port = int(os.environ.get('UDP_PORT', 5000))
         """Start UDP stream listener"""
         try:
             print(f"🔌 Starting UDP stream listener on port {port}")
@@ -463,7 +465,8 @@ def main():
     # Start UDP stream
     if processor.start_udp_stream():
         print("✅ Processor started successfully")
-        print("📺 Waiting for camera stream on UDP port 5000...")
+        udp_port = int(os.environ.get('UDP_PORT', 5000))
+        print(f"📺 Waiting for camera stream on UDP port {udp_port}...")
         print("💡 Send MJPEG stream to this port to start processing")
         
         try:

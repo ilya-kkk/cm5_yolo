@@ -22,8 +22,10 @@ services:
     environment:
       - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/usr/lib/python3.10/dist-packages:/usr/local/lib/python3.10/site-packages:/usr/lib/python3.11/dist-packages:/workspace
       - LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
+      - UDP_PORT=5000  # Use UDP port 5000
     working_dir: /workspace
-    network_mode: "host"  # Required to access UDP port 5000
+    ports:
+      - "5000:5000/udp"  # Expose UDP port 5000
     restart: unless-stopped
     command: ["python3", "/workspace/hailo_yolo_main.py"]
     privileged: true  # Required for camera access
@@ -36,8 +38,10 @@ services:
       - /dev:/dev  # Access to camera devices
     environment:
       - PYTHONPATH=/workspace
+      - UDP_PORT=5001  # Use UDP port 5001
     working_dir: /workspace
-    network_mode: "host"  # Required to access UDP port 5000
+    ports:
+      - "5001:5001/udp"  # Expose UDP port 5001
     restart: unless-stopped
     command: ["python3", "/workspace/simple_yolo_processor.py"]
     privileged: true  # Required for camera access

@@ -1,24 +1,24 @@
-# Use Ubuntu 20.04 with Python 3.8 for maximum GLIBC compatibility with CM5
-FROM ubuntu:20.04
+# Use Ubuntu 22.04 with Python 3.10 for better GLIBC compatibility with Hailo
+FROM ubuntu:22.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/usr/local/lib/python3.8/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.8/dist-packages
+ENV PYTHONPATH=/usr/local/lib/python3.10/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.10/dist-packages
 ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
 ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
 ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
-# Install Python 3.8 and system dependencies
+# Install Python 3.10 and system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.8 \
-    python3.8-dev \
+    python3.10 \
+    python3.10-dev \
     python3-pip \
-    python3.8-venv \
-    python3.8-distutils \
+    python3.10-venv \
+    python3.10-distutils \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -45,8 +45,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create symlink for python3
-RUN ln -sf /usr/bin/python3.8 /usr/bin/python3
-RUN ln -sf /usr/bin/python3.8 /usr/bin/python
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python3
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 
 # Set working directory
 WORKDIR /workspace

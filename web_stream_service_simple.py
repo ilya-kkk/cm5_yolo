@@ -11,7 +11,14 @@ import base64
 from io import BytesIO
 import cv2
 import numpy as np
-from hailo_platform.pyhailort.pyhailort import VDevice, HEF, InferModel, ConfiguredInferModel
+# Hailo imports - try to import from hailo_wrapper
+try:
+    from hailo_wrapper import HailoYOLOProcessor
+    HAILO_AVAILABLE = True
+    print("✅ Hailo wrapper imported successfully")
+except ImportError as e:
+    HAILO_AVAILABLE = False
+    print(f"❌ Hailo wrapper not available: {e}")
 
 app = Flask(__name__)
 
@@ -25,8 +32,7 @@ processing_stats = {
     "hailo_status": "Unknown",
     "camera_status": "Unknown"
 }
-vdevice = None
-hef = None
+hailo_processor = None
 
 # HTML template for the web interface
 HTML_TEMPLATE = """
@@ -199,11 +205,22 @@ def process_image():
             return jsonify({'success': False, 'message': 'Invalid image format'})
 
         try:
-            global vdevice, hef, processing_stats
-            if vdevice is None:
-                vdevice = VDevice()
-                hef = HEF("yolov8n.hef")
+            global hailo_processor, processing_stats
+            
+            if hailo_processor is None and HAILO_AVAILABLE:
+                try:
+                    hailo_processor = HailoYOLOProcessor()
+                    processing_stats['hailo_status'] = 'Connected'
+                except Exception as e:
+                    print(f"Failed to initialize Hailo processor: {e}")
+                    hailo_processor = None
+                    processing_stats['hailo_status'] = 'Error'
+            
+            if hailo_processor is not None:
+                # Use Hailo processor if available
                 processing_stats['hailo_status'] = 'Connected'
+            else:
+                processing_stats['hailo_status'] = 'Not Available'
 
             # Simple image processing simulation
             processed_image = cv2.resize(image, (640, 640))

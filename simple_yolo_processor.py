@@ -10,11 +10,12 @@ import time
 import socket
 import struct
 import threading
+import os
 from collections import deque
 
 class SimpleYOLOProcessor:
     def __init__(self):
-        self.udp_port = 5000
+        self.udp_port = int(os.environ.get('UDP_PORT', 5000))
         self.udp_socket = None
         self.processing_stats = {
             "fps": 0.0,
@@ -71,7 +72,7 @@ class SimpleYOLOProcessor:
     
     def receive_frames(self):
         """Receive frames from UDP stream"""
-        print("📺 Waiting for camera stream on UDP port 5000...")
+        print(f"📺 Waiting for camera stream on UDP port {self.udp_port}...")
         print("💡 Send MJPEG stream to this port to start processing")
         
         while True:
