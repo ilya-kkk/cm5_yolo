@@ -20,7 +20,7 @@ services:
       - /usr/lib:/usr/lib:ro  # Access to system libraries
       - /usr/local/lib:/usr/local/lib:ro  # Access to local libraries
     environment:
-      - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/usr/lib/python3.10/dist-packages:/usr/local/lib/python3.10/site-packages:/usr/lib/python3.11/dist-packages:/workspace
+      - PYTHONPATH=/workspace
       - LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
       - UDP_PORT=5000  # Use UDP port 5000
     working_dir: /workspace
@@ -55,7 +55,7 @@ services:
       - /usr/lib/python3/dist-packages:/usr/lib/python3/dist-packages:ro  # Access to system Hailo packages
       - /usr/local/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:ro  # Access to system Hailo packages
     environment:
-      - PYTHONPATH=/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages:/workspace
+      - PYTHONPATH=/workspace
     working_dir: /workspace
     restart: "no"
     command: ["python3", "/workspace/test_hailo_basic.py"]
