@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/usr/local/lib/python3.10/site-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.10/dist-packages
+ENV PYTHONPATH=/workspace
 ENV OPENCV_IO_MAX_IMAGE_PIXELS=2147483647
 ENV OPENCV_IO_ENABLE_JASPER=1
 ENV HAILO_PLATFORM_PATH=/usr/lib/python3/dist-packages
@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3.10-venv \
     python3.10-distutils \
+    python3.10-minimal \
+    python3.10-stdlib \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
