@@ -1,6 +1,6 @@
 flask==2.3.3
 pillow==9.5.0
-numpy==1.21.6
-opencv-python-headless==4.5.5.64
-opencv-contrib-python-headless==4.5.5.64
-ultralytics==8.0.196 
+numpy>=1.22.2
+opencv-python-headless>=4.8.0
+opencv-contrib-python-headless>=4.8.0
+ultralytics>=8.0.196 
